@@ -991,3 +991,139 @@ Fonction 0x28F00 : similaire, base = pool 0x17408 = **0x0217FE00** (CLK0 window)
 | `0x17108` | `0x0115A600` | Base SMUIO (Xtensa H2 → SMN 0x5A600) |
 | `0x17408` | `0x0217FE00` | Base CLK0 DPM (Xtensa CLK window) |
 | `0x17410` | `0x0257FE00` | Base CLK1 DPM (Xtensa CLK window) |
+
+### Dispatch function complète — 0xEBC (boot area, session 5, 05/10/2026)
+
+La fonction de dispatch est dans la zone de boot (adresse 0xEBC, en dessous de 0x1014, hors du fichier .dis). Désassemblée via radare2 sur le binaire brut. Format des entrées de la table des handlers : `[func_addr(4), flags_word(4)]` — 8 octets par entrée.
+
+```
+0xEBC: entry a1, 32
+0xEBF: mov.n a10, a2                    ; a10 = queue_num
+0xEC1: call8 0xF90                       ; read CMD → returns msg_id
+0xEC4: l32r a8, [0xB84] = 0x7980        ; per-queue metadata
+0xEC7: l32r a13, [0xB88] = 0x7860       ; per-queue data
+0xECA: addx2 a8, a2, a8                 ; a8 = queue*2 + 0x7980
+0xECD: l16ui a8, a8, 252                ; a8 = handler_count
+0xED0: addx4 a11, a2, a13              ; a11 = queue*4 + 0x7860
+0xED3: l32i a11, a11, 0x1FC            ; a11 = handler_table_base
+0xED6: bltu a10, a8, 0xEE3             ; bounds check (msg_id < count)
+0xEDB-0xEDE: error RSP=0xFE (out of range)
+0xEE3: addx8 a11, a10, a11             ; entry = msg_id*8 + table_base
+0xEE6: l32i.n a9, a11, 0              ; a9 = func_addr
+0xEE8: movi.n a15, -3                  ; a15 = ~2 = 0xFFFFFFFD
+0xEEA: l8ui a12, a11, 5               ; a12 = guard_byte (byte 1 of flags_word)
+0xEED: bnez.n a9, 0xEF9               ; if func → guard check
+0xEEF-0xEF7: error RSP=0xFE (no handler)
+```
+
+#### Guard check (0xEF9-0xF2F)
+
+```
+0xEF9: l32r a14, [0xB8C] = 0x7AA8      ; global state base
+0xEFC: l32i a10, a13, 0x240            ; a10 = state from [0x7AA0]
+0xEFF: extui a12, a12, 0, 7            ; guard_mask (7 bits bas)
+0xF02: l32i a14, a14, 100              ; security_flag = [0x7B0C]
+0xF05: and a10, a10, a15              ; clear bit 1 of state
+0xF08: s32i a10, a13, 0x240           ; store back
+0xF0B: beqz.n a14, 0xF1C              ; if flag==0 → locked path (skip set)
+0xF0D: l32r a8, [0xB94] = 0x320FE00   ; security register MMIO base
+0xF10: l32r a9, [0xB90] = 0x80000000  ; expected value
+0xF13: memw
+0xF16: l32i a8, a8, 0x264             ; read [0x03210064]
+0xF19: bne a8, a9, 0xF24              ; if ≠ 0x80000000 → skip locked
+0xF1C: movi.n a9, 2                    ; LOCKED: set bit 1
+0xF1E: or a10, a10, a9
+0xF21: s32i a10, a13, 0x240
+0xF24: ball a10, a12, 0xF31           ; ALL guard bits in state → dispatch
+0xF27-0xF2F: RSP=0xFD (access denied)
+0xF31: l8ui a10, a11, 5               ; reload guard byte
+0xF34: l32i.n a12, a11, 0             ; func_addr
+0xF36: bbci a10, 7, 0xF40             ; bit 7 → task mode
+0xF39: mov.n a10, a2
+0xF3B: callx8 a12                      ; CALL handler
+0xF3E: retw.n
+0xF40-0xF4D: enqueue as task
+```
+
+#### Logique du guard check
+
+Le state variable `[0x7AA0]` (= `[0x7860+0x240]`) a son **bit 1 effacé** à chaque dispatch, puis **conditionnellement re-armé** :
+
+1. Si `security_flag` (`[0x7B0C]`) == 0 → bit 1 NON ré-armé → handlers avec guard bit 1 = **bloqués**
+2. Si `security_flag` != 0 → lit le registre matériel `[0x03210064]` :
+   - Si == `0x80000000` → bit 1 ré-armé → handlers avec guard bit 1 = **autorisés**
+   - Si != `0x80000000` → bit 1 NON ré-armé → handlers avec guard bit 1 = **bloqués**
+
+Sur la 4700S : le registre `[0x03210064]` lit `0xFFFFFFFF` (domaine verrouillé par le PSP). `0xFFFFFFFF` ≠ `0x80000000` → bit 1 jamais ré-armé → **tous les handlers avec guard bit 1 sont bloqués** (RSP=0xFD).
+
+#### Initialisation du security_flag (0x1B024-0x1B059)
+
+```
+0x1B044: l32r a8, [0x17024] = 0x0120FE00   ; security register MMIO base (init)
+0x1B047: l32r a10, [0x1701C] = 0x00080000  ; mask = bit 19
+0x1B04A: l32r a9, [0x17020] = 0x7AA8       ; global state base
+0x1B04D: memw
+0x1B050: l32i a8, a8, 0x3C0                ; read [0x012101C0]
+0x1B053: and a8, a8, a10                    ; mask bit 19
+0x1B056: extui a8, a8, 19, 13              ; shift → 0 or 1
+0x1B059: s32i a8, a9, 100                  ; [0x7B0C] = security_flag
+```
+
+Le `security_flag` est 0 ou 1, dérivé du bit 19 du registre matériel à l'adresse Xtensa `0x012101C0`. Ces registres (`0x0121xxxx` et `0x0321xxxx`) sont **internes au processeur Xtensa du SMU** — ils n'ont pas d'équivalent SMN accessible depuis l'hôte.
+
+### Tables de dispatch par file
+
+| File | table_base | count | handlers guard=0x00 | handlers guard≠0x00 |
+|---|---|---|---|---|
+| Queue 0 | 0x706C | 55 | ~55 | ~0 |
+| Queue 1 | 0x7224 | 17 | ~17 | ~0 |
+| Queue 2 | 0x72AC | 49 | 49 (tous) | 0 |
+| Queue 3 | 0x7434 | 169 | ~95 | ~74 |
+| Queue 4 | 0x7434 | 169 | (=Q3) | (=Q3) |
+
+### Queue 2 — handlers msg 0x2B-0x2D analysés et éliminés
+
+Les entrées Q2 pour msg 0x2B-0x2D ont guard=0x00 (accessibles) mais ce ne sont **PAS** des primitives SMN write :
+
+| Q2 msg | Handler | Fonction réelle |
+|---|---|---|
+| 0x2B | `0x2DD78` | Conversion flottante (DPM utility) |
+| 0x2C | `0x2DD9C` | Conversion flottante (DPM utility) |
+| 0x2D | `0x2DDC0` | Conversion flottante (DPM utility) |
+
+Les vrais handlers SMN write (0x2B/0x2C) sont en **Queue 3** avec guard=0x02 (bit 1 conditionnel → bloqués).
+
+### Scan exhaustif Q3 — aucun autre handler non-gardé n'atteint SMN_write
+
+Analyse des ~95 handlers Q3 avec guard=0x00, en suivant les chaînes d'appels jusqu'à 2 niveaux d'indirection. **Seul msg 0x98 appelle la fonction SMN_write (0x2A74).** Et msg 0x98 écrit toujours la valeur **fixe 0xFF** (`movi.n a12, 0xFF` hardcodé dans le handler 0x27134).
+
+### Bus hang 0x01210BC0 (05/10/2026)
+
+Tentative de lecture SMN 0x01210BC0 depuis l'hôte (PCI 0x60/0x64) → **bus hang immédiat**, machine figée. Le journal smnread montre "AVANT 0x01210bc0" sans ligne de résultat.
+
+**Note :** l'adresse visée était **fausse** (erreur de calcul). L'adresse correcte du registre d'init est `0x0120FE00 + 0x3C0 = 0x012101C0`. Mais toute la plage `0x0121xxxx` est dangereuse depuis l'hôte — ajoutée au deny list (`0x01210000-0x01220000`). La plage `0x0321xxxx` (registre dispatch) est également ajoutée par précaution (`0x03210000-0x03220000`).
+
+### Piste 2 — FERMÉE (05/10/2026)
+
+**Verdict : le guard check est verrouillé matériellement.** Le security_flag est initialisé depuis un registre interne SMU (`0x012101C0`) au boot du PMFW. Le registre de sécurité dispatch (`0x03210064`) est vérifié à chaque dispatch. Les deux registres sont **internes au processeur Xtensa** (adresses `0x012xxxxx` et `0x032xxxxx`), inaccessibles depuis l'hôte par quelque chemin que ce soit.
+
+Impossible de :
+- Modifier le security_flag `[0x7B0C]` (SRAM verrouillée par le PSP)
+- Modifier le registre matériel `[0x03210064]` (bus interne Xtensa, pas de chemin SMN)
+- Modifier le registre d'init `[0x012101C0]` (idem)
+- Forcer le re-armement du bit 1 du state variable `[0x7AA0]` (SRAM verrouillée)
+
+**Msgs 0x2B/0x2C (SMN write paramétré) restent inaccessibles sur la 4700S.**
+
+### Piste 1 — msg 0x98 (0xFF fixe) vers SMUIO power : seul chemin viable
+
+msg 0x98 est le **seul handler non-gardé** capable d'écrire via le fenêtrage SMN du SMU. Le fabric SMN autorise l'initiateur MP1 (confirmé par le test 0x5A868). Contrainte : la valeur est toujours 0xFF.
+
+Registres SMUIO Phase 1 et compatibilité 0xFF :
+
+| Registre | Valeur actuelle | Valeur cible Phase 1 | 0xFF compatible ? | Risque |
+|---|---|---|---|---|
+| `0x5A334` (PWRMGT) | `0x0000000F` | `0x0000003F` (set bits 4-5) | **Incertain** — 0xFF set bits 6-7 en plus, potentiellement réservés | Moyen |
+| `0x5A868` (GPIO RMW) | `0x00000001` | — (test seulement) | **OUI** — test déjà confirmé | Aucun |
+
+**Prochaine étape** : analyser les registres SMUIO 0x5A320-0x5A338 individuellement pour déterminer si 0xFF est une valeur acceptable pour chacun d'eux, en comparant avec la séquence d'allumage BC-250 et les spécifications connues du bloc SMUIO.

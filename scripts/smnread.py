@@ -12,7 +12,10 @@ IDX, DATA = 0x60, 0x64
 # Bloc de la boite aux lettres MP1 et registres signales comme figeant le SMU : refuses.
 # 0x09xxxxxx (pages de controle par IP du MP1) : la lecture de 0x0900E230 a fige la machine le 04/10/2026.
 # 0x03C00000-0x04000000 (SRAM MP1) : aperture fermee par le PSP, lecture = 0xFFFFFFFF, ecriture msg 0x98 = gel SMU (05/10/2026).
-DENY = [(0x03B00000, 0x04000000), (0x00003D64, 0x00003D68), (0x09000000, 0x0A000000)]
+# 0x01210000-0x01220000 : registres internes SMU (securite PMFW). Lecture de 0x01210BC0 a fige la machine le 05/10/2026.
+# 0x03210000-0x03220000 : registres internes SMU (securite dispatch). Meme risque que 0x0121xxxx.
+DENY = [(0x03B00000, 0x04000000), (0x00003D64, 0x00003D68), (0x09000000, 0x0A000000),
+        (0x01210000, 0x01220000), (0x03210000, 0x03220000)]
 
 def main():
     log = open(sys.argv[1], "a")
