@@ -776,30 +776,25 @@ Mécanisme de la fonction d'écriture SMN (0x2a74) :
 
 guard=0x02 (bit 1 conditionnel). Le registre de sécurité SMN `0x03210064` renvoie `0xFFFFFFFF` depuis l'hôte (domaine verrouillé par le PSP). La condition de gate n'est pas remplie sur la 4700S. **Aucun moyen connu de changer ce registre.**
 
-### Écriture SMN depuis l'hôte : confirmée
+### Écriture SMN depuis l'hôte : SMUIO protégé
 
-Test neutre : écriture de la valeur courante (0x00) dans SMN `0x0005A338` via PCI config 0x60/0x64. Relecture identique. **La voie d'écriture SMN host fonctionne pour les registres SMUIO.**
+Test neutre (05/10/2026 session 2) : écriture de la valeur courante (0x00) dans SMN `0x0005A338` → relecture identique. **Faux positif** : la valeur écrite était déjà celle en place. Test réel (05/10/2026 session 3, `scripts/tests/smuio_phase1.py`) : 4 écritures RMW avec valeurs différentes → **toutes ignorées**, readback = valeurs originales. Les registres SMUIO `0x5A320-338` sont protégés en écriture côté hôte (le fabric SMN filtre par initiateur). L'écriture SMN hôte fonctionne mécaniquement (pas de bus hang) mais ces registres spécifiques refusent les écritures hôte.
 
 ### Bilan : chemins d'écriture disponibles
 
 | Cible | Depuis l'hôte (0x60/0x64) | msg 0x98 (0xFF fixe) | msg 0x23 ring buf | msgs 0x2B/0x2C |
 |---|---|---|---|---|
-| SMUIO `0x0005A32C-338` | **OUI** ✓ | Oui mais 0xFF seulement | Non | Bloqué |
-| Page 0x0B `0x0900Bxxx` | **Non** (fige) | Risque gel SMN | Non | Bloqué |
-| CLK `0x16C/16Exxxxx` | **OUI** ✓ | Oui mais 0xFF | Consumer inactif | Bloqué |
+| SMUIO `0x0005A320-338` | **NON** ✗ (protégé en écriture) | À tester | Non | Bloqué |
+| Page 0x0B `0x0900Bxxx` | **Non** (fige) | Non (fige SMU) | Non | Bloqué |
+| CLK `0x16C/16Exxxxx` | Lecture OUI, écriture ? | Oui mais 0xFF | Consumer inactif | Bloqué |
 | SRAM `0x03C0xxxx` | Non (verrouillé) | Non (fige SMU) | Non | Bloqué |
 
 ### Pistes mises à jour (post-tests live)
 
 1. ~~msg 0x0A pour lire SRAM~~ → retourne toujours 0x05, fermé.
 2. ~~Ring buffer pour CLK~~ → consumer inactif (GFX éteint), fermé pour l'instant.
-3. **PRIORITAIRE : écriture SMUIO depuis l'hôte** — les 4 registres `0x0005A320/32C/330/334/338` sont les premières étapes de la séquence d'allumage BC-250. L'hôte peut les écrire directement. Cibles (d'après la trace BC-250) :
-   - `0x0005A320` : 0x02 → 0x00 (`&~2`)
-   - `0x0005A334` : 0x0F → 0x17 (`&~8 | 0x17`)
-   - `0x0005A330` : 0x0E → 0x01 (`|1 &~0xE`)
-   - `0x0005A32C` : 0x08 → 0x38 (`|0x30`)
-   - `0x0005A338` : 0x00 → 0x01 (`bit 0`)
-   **Aucune écriture sans accord explicite.** Risque : incohérence entre SMUIO (on) et page 0x0B (off) si la phase 3 n'est pas faite.
+3. ~~Écriture SMUIO depuis l'hôte~~ → **FERMÉ (05/10/2026)** : testé les 4 écritures Phase 1 (0x5A320 `&~2`, 0x5A334 `|0x30`, 0x5A330 `|1 &~0xE`, 0x5A32C `|0x17 &~8`) via PCI config 0x60/0x64. **Résultat : toutes ignorées silencieusement.** Readback = valeurs originales inchangées. Les registres SMUIO `0x5A320-338` sont **protégés en écriture côté hôte** (le fabric SMN filtre par initiateur). Le BC-250 utilise la fenêtre Xtensa 0x011xxxxx (bus interne direct, pas le fabric SMN). Script : `scripts/tests/smuio_phase1.py`.
 4. ~~msg 0x98 sur SMN 0x0900B034~~ → **FERMÉ (05/10/2026)** : testé msg 0x98 sur 0x0900B100 (zone vide page 0x0B). **Résultat : GEL SMU** (timeout, mbox 2 et Q3 mortes, machine OK mais SMU figé → power cycle). Le chemin SMN vers `0x09xxxxxx` est fermé pour TOUS les initiateurs, y compris le SMU via son fenêtrage (0x02Cxxxxx → slot 0x03220038). Seule la fenêtre Xtensa locale (0x010xxxxx = bus interne, pas SMN) fonctionne. Deny list smnread.py déjà à jour. **Le SMU ne peut PAS écrire à SMN 0x09xxxxxx par msg 0x98.**
-5. **ALTERNATIVE : écriture CLK depuis l'hôte** — les registres CLK (`0x16C/0x16E`) sont accessibles en lecture. Si l'écriture fonctionne aussi, on pourrait configurer les horloges GFX directement, sans passer par le ring buffer.
+5. **Écriture CLK depuis l'hôte** — les registres CLK (`0x16C/0x16E`) sont accessibles en lecture. Écriture probablement protégée aussi (même mécanisme SMN), à vérifier.
 6. **Identifier base SMN de la fenêtre 0x010** — la table à SRAM 0x1B25C n'est pas lisible. Chercher dans le PSP ou dans le code BIOS.
+7. **PRIORITAIRE : cartographier les 42 handlers mbox 2** — seuls msg 0x0A et 0x23 sont analysés sur 42 (tous guard=0x00). Chercher un handler qui écrit dans les registres SMUIO via le bus interne Xtensa (0x011xxxxx), ou qui offre une écriture paramétrable.
