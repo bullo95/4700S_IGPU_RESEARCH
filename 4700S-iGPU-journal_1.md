@@ -784,8 +784,8 @@ Test neutre (05/10/2026 session 2) : écriture de la valeur courante (0x00) dans
 
 | Cible | Depuis l'hôte (0x60/0x64) | msg 0x98 (0xFF fixe) | msg 0x23 ring buf | msgs 0x2B/0x2C | msg 12 I2C | msg 20 DPM |
 |---|---|---|---|---|---|---|
-| SMUIO `0x5A320-338` (power) | **NON** ✗ (protégé) | **À tester** ← piste 10 | Non | Bloqué | Non | Non |
-| SMUIO `0x5A818-870` (GPIO) | À vérifier | À tester | Non | Bloqué | Non | Non |
+| SMUIO `0x5A320-338` (power) | **NON** ✗ (protégé) | **OUI probable** (à tester) | Non | Bloqué | Non | Non |
+| SMUIO `0x5A818-870` (GPIO) | Lecture OUI | **OUI** ✓ (0x5A868 confirmé) | Non | Bloqué | Non | Non |
 | Page 0x0B `0x0900Bxxx` | **Non** (fige) | Non (fige SMU) | Non | Bloqué | Non | Non |
 | CLK `0x16C/16Exxxxx` | Lecture OUI, écriture ? | Oui mais 0xFF | Consumer inactif | Bloqué | Non | OUI (fixe) |
 | SRAM `0x03C0xxxx` | Non (verrouillé) | Non (fige SMU) | Non | Bloqué | Non | Non |
@@ -806,7 +806,54 @@ Test neutre (05/10/2026 session 2) : écriture de la valeur courante (0x00) dans
    - **msg 39** : set fréquence GFX, appelle SMN write — valeur=ARG, adresse=structure fan (non modifiable).
 8. ~~Explorer msg 12 / I2C VRM~~ → **FERMÉ (05/10/2026 session 4)**. Voir analyse détaillée ci-dessous.
 9. **CORRECTION** : le PMFW 4700S a **13 références au SMUIO** (via literal pool 0x17108 = Xtensa 0x0115A600 → SMN 0x5A600). L'affirmation antérieure « aucune référence SMUIO » était fausse (recherche directe 0x0115A dans le code ne trouve rien, il faut suivre les indirections literal pool). Mais ces 13 refs accèdent aux registres GPIO/status (0x5A818-0x5A870), **PAS aux registres power 0x5A320-338**. Voir section dédiée.
-10. **PRIORITAIRE : test msg 0x98 sur SMUIO** — écrire 0xFF via msg 0x98 (grande file, fenêtrage SMU 0x02Cxxxxx) sur un registre SMUIO inoffensif pour vérifier si le chemin SMU windowed a accès SMUIO en écriture. L'hôte est bloqué, mais le SMU est un **initiateur différent** dans le fabric SMN.
+10. ~~Test msg 0x98 sur SMUIO~~ → **CONFIRMÉ (05/10/2026 session 4)**. Le chemin SMU windowed (msg 0x98 via 0x02Cxxxxx → slot 0x03220038) **a accès en écriture aux registres SMUIO**. Test : 0x5A868 passé de 0x01 à 0xFF (écriture confirmée), 0x5A874 resté à 0x00 (registre RAZ/non-implémenté). **Le fabric SMN laisse passer l'initiateur MP1 (SMU) vers SMUIO, contrairement à l'hôte.** Script : `scripts/tests/msg98_smuio_test.py`. Power cycle effectué après le test (0x5A868 modifié, registre utilisé par le PMFW en RMW).
+11. **PRIORITAIRE : exploiter le chemin SMU windowed vers SMUIO power (0x5A320-338)**. msg 0x98 écrit toujours 0xFF → inadapté pour les écritures Phase 1 (qui nécessitent des RMW précis). Deux sous-pistes :
+    - **11a** : tester msg 0x98 sur 0x5A334 (actuellement 0x0F, Phase 1 veut 0x3F, 0xFF inclut les bits voulus mais en set plus). Risque : bits parasites dans un registre power.
+    - **11b** : chercher dans la grande file un message capable d'écrire une **valeur paramétrable** via le même chemin SMU windowed. Réexaminer les 95+ handlers guard=0x00 de la grande file.
+
+### Test msg 0x98 sur SMUIO (session 4, 05/10/2026)
+
+**But** : vérifier si le chemin d'écriture SMN du SMU (fenêtrage interne 0x02Cxxxxx) passe le filtre du fabric SMN vers les registres SMUIO, alors que l'hôte est bloqué.
+
+**Protocole** : msg 0x98 (grande file mbox 3, guard=0x00) écrit 0xFF à SMN[ARG]. Lecture hôte avant/après via PCI 0x60/0x64.
+
+**Résultats** :
+
+| Registre | Rôle | Avant | Après msg 0x98 | Verdict |
+|---|---|---|---|---|
+| `0x5A874` | Hors-PMFW (non-référencé) | `0x00000000` | `0x00000000` | RAZ ou non-implémenté |
+| `0x5A868` | RMW par PMFW | `0x00000001` | **`0x000000FF`** | **ÉCRITURE CONFIRMÉE** |
+
+**Conclusion** : le fabric SMN **autorise l'initiateur MP1** (SMU) à écrire dans le bloc SMUIO, y compris les registres du bloc smuio_pwr (0x5A800+). L'hôte est filtré, mais le SMU passe. Ceci ouvre potentiellement l'accès aux registres power Phase 1 (0x5A320-338) via le même mécanisme. **Le problème restant : msg 0x98 écrit toujours 0xFF, pas une valeur paramétrable.**
+
+#### Valeurs SMUIO GPIO lues depuis l'hôte (pour référence)
+
+| SMN | Valeur | Description |
+|---|---|---|
+| `0x5A800` | `0x00000002` | |
+| `0x5A818` | `0x0000FFFE` | GPIO data (R/W par PMFW) |
+| `0x5A81C` | `0x00000013` | Readback (R par PMFW) |
+| `0x5A820` | `0x49140890` | |
+| `0x5A824` | `0x80000000` | |
+| `0x5A828` | `0x48140880` | |
+| `0x5A82C` | `0x80000000` | |
+| `0x5A830` | `0x47140870` | |
+| `0x5A834` | `0x80000000` | |
+| `0x5A838` | `0x46540864` | |
+| `0x5A83C` | `0x80000000` | |
+| `0x5A840` | `0x45940858` | |
+| `0x5A844` | `0x80000000` | |
+| `0x5A848` | `0x44940A5A` | |
+| `0x5A84C` | `0x80000000` | |
+| `0x5A850` | `0x43940E62` | |
+| `0x5A854` | `0x80000000` | |
+| `0x5A858` | `0x42141658` | |
+| `0x5A85C` | `0x80000000` | |
+| `0x5A864` | `0x0000283F` | Config (W par PMFW) |
+| `0x5A868` | `0x00000001` | RMW par PMFW |
+| `0x5A86C` | `0x00840F70` | Status/ctrl (R/W par PMFW) |
+| `0x5A870` | `0x000000FF` | Status 8-bit (R par PMFW) |
+| `0x5A880` | `0x003C2082` | |
 
 ### Analyse I2C — msg 12, 27, 28 (session 4, 05/10/2026)
 

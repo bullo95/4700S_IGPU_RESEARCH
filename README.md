@@ -32,12 +32,14 @@ This project documents attempts to reactivate the iGPU by understanding and mani
 - PMFW family 88 (BC-250) has full GFX power-on sequence via msg 0x1B
 - BC-250 BIOS flash on 4700S: writes OK but **no POST** (key chain "RBN" rejected by silicon expecting "CRD")
 - SMN range `0x09xxxxxx` (GFX control pages) is **blocked for all initiators** including PMFW SMN windowed access — only reachable via Xtensa local window `0x010xxxxx` (internal bus)
-- Host SMN writes to SMUIO registers (`0x0005Axxxx`) confirmed working via PCI config 0x60/0x64
+- Host SMN writes to SMUIO registers (`0x0005Axxxx`) are **blocked** (write-protected by SMN fabric initiator filter)
+- **SMU windowed writes** to SMUIO registers **work** — confirmed via msg 0x98 (MP1 initiator passes the filter)
 - Guard byte analysis: 95 messages have guard=0x00 (always dispatched), 13 have guard=0x02 (blocked by security register)
+- I2C path (msg 12/27/28) fully analyzed and closed — controller on MP1 local bus, not usable for VRM control
 
 ## Status
 
-Active research. Current focus: host-side SMUIO register writes to replicate Phase 1 of the BC-250 GFX power-on sequence.
+Active research. Current focus: exploiting the SMU windowed write path to SMUIO power registers (0x5A320-338) for GFX Phase 1 power-on sequence.
 
 ## Warning
 
