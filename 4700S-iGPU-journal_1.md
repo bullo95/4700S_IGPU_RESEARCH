@@ -782,12 +782,14 @@ Test neutre (05/10/2026 session 2) : écriture de la valeur courante (0x00) dans
 
 ### Bilan : chemins d'écriture disponibles
 
-| Cible | Depuis l'hôte (0x60/0x64) | msg 0x98 (0xFF fixe) | msg 0x23 ring buf | msgs 0x2B/0x2C |
-|---|---|---|---|---|
-| SMUIO `0x0005A320-338` | **NON** ✗ (protégé en écriture) | À tester | Non | Bloqué |
-| Page 0x0B `0x0900Bxxx` | **Non** (fige) | Non (fige SMU) | Non | Bloqué |
-| CLK `0x16C/16Exxxxx` | Lecture OUI, écriture ? | Oui mais 0xFF | Consumer inactif | Bloqué |
-| SRAM `0x03C0xxxx` | Non (verrouillé) | Non (fige SMU) | Non | Bloqué |
+| Cible | Depuis l'hôte (0x60/0x64) | msg 0x98 (0xFF fixe) | msg 0x23 ring buf | msgs 0x2B/0x2C | msg 12 I2C | msg 20 DPM |
+|---|---|---|---|---|---|---|
+| SMUIO `0x5A320-338` (power) | **NON** ✗ (protégé) | **À tester** ← piste 10 | Non | Bloqué | Non | Non |
+| SMUIO `0x5A818-870` (GPIO) | À vérifier | À tester | Non | Bloqué | Non | Non |
+| Page 0x0B `0x0900Bxxx` | **Non** (fige) | Non (fige SMU) | Non | Bloqué | Non | Non |
+| CLK `0x16C/16Exxxxx` | Lecture OUI, écriture ? | Oui mais 0xFF | Consumer inactif | Bloqué | Non | OUI (fixe) |
+| SRAM `0x03C0xxxx` | Non (verrouillé) | Non (fige SMU) | Non | Bloqué | Non | Non |
+| I2C contrôleur MP1 | Non (bus local) | Non | Non | Non | Via PMFW | Non |
 
 ### Pistes mises à jour (post-tests live)
 
@@ -797,4 +799,148 @@ Test neutre (05/10/2026 session 2) : écriture de la valeur courante (0x00) dans
 4. ~~msg 0x98 sur SMN 0x0900B034~~ → **FERMÉ (05/10/2026)** : testé msg 0x98 sur 0x0900B100 (zone vide page 0x0B). **Résultat : GEL SMU** (timeout, mbox 2 et Q3 mortes, machine OK mais SMU figé → power cycle). Le chemin SMN vers `0x09xxxxxx` est fermé pour TOUS les initiateurs, y compris le SMU via son fenêtrage (0x02Cxxxxx → slot 0x03220038). Seule la fenêtre Xtensa locale (0x010xxxxx = bus interne, pas SMN) fonctionne. Deny list smnread.py déjà à jour. **Le SMU ne peut PAS écrire à SMN 0x09xxxxxx par msg 0x98.**
 5. **Écriture CLK depuis l'hôte** — les registres CLK (`0x16C/0x16E`) sont accessibles en lecture. Écriture probablement protégée aussi (même mécanisme SMN), à vérifier.
 6. **Identifier base SMN de la fenêtre 0x010** — la table à SRAM 0x1B25C n'est pas lisible. Chercher dans le PSP ou dans le code BIOS.
-7. **PRIORITAIRE : cartographier les 42 handlers mbox 2** — seuls msg 0x0A et 0x23 sont analysés sur 42 (tous guard=0x00). Chercher un handler qui écrit dans les registres SMUIO via le bus interne Xtensa (0x011xxxxx), ou qui offre une écriture paramétrable.
+7. ~~Cartographier les 42 handlers mbox 2~~ → **FAIT (05/10/2026 session 3)**. Résultat : **aucun handler ne permet d'écrire à une adresse SMN arbitraire**. L'adresse cible vient toujours d'une constante (literal pool) ou d'un champ SRAM interne, jamais de ARG[0]. La seule callsite de la fonction d'écriture SMN (0x2a74c) est dans le sous-système fan/thermique (timers périodiques + msg 39). Handlers notables :
+   - **msg 12 (0x24734)** : programmation I2C/SMBus (sub-cmd 3/4/5). Écrit à un contrôleur I2C via MMIO. Pourrait piloter un VRM GFX via I2C (SVI2/SVI3).
+   - **msg 20/21** : enable/disable GFX DPM (registres fixes, bases SRAM 0x17408/0x17410).
+   - **msg 22/32** : init horloge GFX/SOC (dizaines d'écritures CLK fixes). Risque de hang si GFX éteint.
+   - **msg 39** : set fréquence GFX, appelle SMN write — valeur=ARG, adresse=structure fan (non modifiable).
+8. ~~Explorer msg 12 / I2C VRM~~ → **FERMÉ (05/10/2026 session 4)**. Voir analyse détaillée ci-dessous.
+9. **CORRECTION** : le PMFW 4700S a **13 références au SMUIO** (via literal pool 0x17108 = Xtensa 0x0115A600 → SMN 0x5A600). L'affirmation antérieure « aucune référence SMUIO » était fausse (recherche directe 0x0115A dans le code ne trouve rien, il faut suivre les indirections literal pool). Mais ces 13 refs accèdent aux registres GPIO/status (0x5A818-0x5A870), **PAS aux registres power 0x5A320-338**. Voir section dédiée.
+10. **PRIORITAIRE : test msg 0x98 sur SMUIO** — écrire 0xFF via msg 0x98 (grande file, fenêtrage SMU 0x02Cxxxxx) sur un registre SMUIO inoffensif pour vérifier si le chemin SMU windowed a accès SMUIO en écriture. L'hôte est bloqué, mais le SMU est un **initiateur différent** dans le fabric SMN.
+
+### Analyse I2C — msg 12, 27, 28 (session 4, 05/10/2026)
+
+#### Architecture I2C du PMFW
+
+Le PMFW utilise un contrôleur I2C **interne au MP1**, distinct des blocs SMUIO I2C :
+
+| Composant | Adresse Xtensa | SMN estimé | Accès hôte |
+|---|---|---|---|
+| Contrôleur I2C MP1 (transfert) | `0x0327FE00` | `~0x0327FE00` | Non (bus local) |
+| Contrôleur I2C MP1 (scanner) | `0x01C1D600` | `~0x01C1D600` | Non (bus local) |
+| SMUIO I2C0 (CKSVII2C) | — | `0x0005A100` | `0xFFFFFFFF` (dark) |
+| SMUIO I2C1 (CKSVII2C1) | — | `0x0005A200` | `0xFFFFFFFF` (dark) |
+
+Registres du contrôleur I2C MP1 (offsets depuis base 0x0327FE00) :
+
+| Offset | Rôle |
+|---|---|
+| +0x200 | IC_CON / mode (cmd) |
+| +0x204 | IC_TAR / adresse cible (slave) |
+| +0x208 | Trigger / status (bit 30 = done) |
+| +0x20C | Config (masque+mode) |
+| +0x210 | Longueur data |
+| +0x218 | Data lecture (si cmd bit 0-2 = 0) |
+| +0x21C | Data écriture (si cmd bit 0-2 ≠ 0) |
+
+#### Struct I2C — SRAM 0x15300
+
+Pointée par le literal pool 0x17958 (valeur = 0x00015300). Seulement 5 références dans tout le PMFW, toutes dans les handlers I2C.
+
+| Offset | Valeur initiale (SRAM) | Écrit par | Lu par |
+|---|---|---|---|
+| +0 | 0x00000000 | msg 27 (flags) | msg 27, msg 28 |
+| +4 | 0x0000FFFD | msg 27 (slave addr) | sub-cmd 3/4/5 |
+| +8 | 0xFC000404 | msg 28 (commande) | sub-cmd 3/4/5 |
+| +12 | 0x00002C00 | **personne** | sub-cmd 3 |
+| +16 | 0x00003000 | **personne** | sub-cmd 4 |
+| +20 | 0x00003400 | **personne** | sub-cmd 5 |
+
+**Les champs data (+12/+16/+20) ne sont écrits par aucun handler ni aucune fonction d'init. Ils gardent leurs valeurs binaires initiales.**
+
+#### msg 27 — set slave addr (handler 0x24790)
+
+- `get_arg(ctx)` → ARG
+- Si ARG == 0 : struct[4] = 0, flags |= 1, retour 1 (succès)
+- Si ARG ≠ 0 : flags = 0, retour 255 (erreur)
+- **Limitation : ne peut mettre que slave addr = 0 (appel général I2C)**
+
+#### msg 28 — set command byte (handler 0x247C0)
+
+- `get_arg(ctx)` → ARG
+- Si ARG ≥ 0 (signé, i.e. bit 31 clair) : erreur
+- Puis si ARG > 0xBFFFFFFD (non-signé) : erreur
+- Sinon (0x80000000 ≤ ARG ≤ 0xBFFFFFFD) : struct[8] = ARG, flags |= 2, succès
+- **Plage restreinte et inhabituelle pour un « command byte » I2C**
+
+#### msg 12 — I2C transaction (handler 0x24734)
+
+- `get_arg(ctx)` → ARG, extrait les 16 bits bas
+- Sub-commande 3/4/5 valides, sinon erreur 255
+- Pas de vérification du flag struct[0] — exécute directement
+
+Sub-cmd 3 (0x2465c) : appelle `i2c_channel_init()` (0x1ea98), scanne 8 canaux, puis `i2c_transaction(slave=struct[4], cmd=struct[8], data=struct[12] | scan_result)`
+
+Sub-cmd 4 (0x24704) : `i2c_transaction(slave=struct[4], cmd=struct[8], data=struct[16] | 1)`
+
+Sub-cmd 5 (0x2471c) : `i2c_transaction(slave=struct[4], cmd=struct[8], data=struct[20] | 1)`
+
+#### Fonctions utilitaires identifiées
+
+| Adresse | Rôle | Signature |
+|---|---|---|
+| `0x00000FA8` | `set_response(ctx, status)` | a10=ctx, a11=status |
+| `0x00000FE4` | `set_resp_data(ctx, value)` | a10=ctx, a11=value |
+| `0x00000FFC` | `get_arg(ctx)` → ARG | a10=ctx → retour a10 |
+| `0x000248F0` | `i2c_transaction(slave, cmd, data)` | a10=slave, a11=cmd, a12=data |
+| `0x0001EA98` | `i2c_channel_init()` | (pas d'args significatifs) |
+
+#### Conclusion I2C
+
+Le chemin I2C msg 12 est **inutilisable pour piloter un VRM GFX** :
+- On ne peut pas choisir l'adresse esclave (msg 27 n'accepte que 0)
+- On ne peut pas choisir les data (figées dans la SRAM binaire)
+- Le contrôleur I2C est sur le bus local MP1, inaccessible depuis l'hôte
+- Les blocs SMUIO I2C (0x5A100/0x5A200) sont dark (0xFFFFFFFF)
+
+### Correction SMUIO — le PMFW 4700S accède au SMUIO (session 4, 05/10/2026)
+
+**CORRECTION** de l'analyse piste 7 : le literal pool 0x17108 contient **0x0115A600** (Xtensa H2 → SMN 0x0005A600 = SMUIO base + 0x600, soit le bloc smuio_pwr). 13 callsites dans le PMFW accèdent à 6 registres distincts :
+
+| SMN | Offset depuis base 0x5A600 | Accès | Callsites |
+|---|---|---|---|
+| `0x5A818` | +0x218 | R/W | 4 sites (GPIO/data write) |
+| `0x5A81C` | +0x21C | R | 2 sites (readback) |
+| `0x5A864` | +0x264 | W | 1 site |
+| `0x5A868` | +0x268 | RMW | 2 sites |
+| `0x5A86C` | +0x26C | R/W | 4 sites |
+| `0x5A870` | +0x270 | R | 2 sites (status 8 bits) |
+
+Ces registres sont dans le bloc **smuio_pwr** (base 0x5A800), la même zone que SOC_GAP_PWROK (0x5ABE0) et GFX_GAP_PWROK (0x5ABE4). Ils servent probablement au contrôle GPIO et à la surveillance thermique/alimentation.
+
+**Les registres power Phase 1 (0x5A320-0x5A338, bloc smuio base 0x5A000) ne sont référencés nulle part dans le PMFW 4700S.** La séquence d'allumage GFX n'existe pas.
+
+### Analyse msg 20/21 — GFX DPM (session 4)
+
+msg 20 (0x290D4) = enable GFX DPM, msg 21 (0x29104) = disable. Même structure :
+- ARG bits 0-1 doivent être non-nuls
+- Bit 0 → appelle 0x28F00 (DPM domaine 1)
+- Bit 1 → appelle 0x28F4C (DPM domaine 2)
+
+Fonction 0x28F4C (enable DPM domaine 2) :
+- Base = pool 0x17410 = **0x0257FE00** (Xtensa CLK1 window → SMN ~0x16F7FE00)
+- Lit status à [base+0x308] bits 8-9 ; si 3 = déjà activé, sort
+- RMW [base+0x21C] : set bits 0,1
+- Appelle subroutine 0x29040 (activation DPM proprement dite)
+- Set [base+0x350] bit 0 sur succès
+
+Fonction 0x28F00 : similaire, base = pool 0x17408 = **0x0217FE00** (CLK0 window)
+
+**msg 20/21 contrôlent l'espace CLK (fréquences/tensions dynamiques), PAS l'alimentation SMUIO. Le DPM présuppose le GFX déjà sous tension.**
+
+### Literal pool — constantes I2C (pour référence)
+
+| Pool addr | Valeur | Rôle |
+|---|---|---|
+| `0x17958` | `0x00015300` | Pointeur struct I2C en SRAM |
+| `0x1795C` | `0xBFFFFFFD` | Borne haute msg 28 (range check) |
+| `0x17960` | `0x0327FE00` | Base contrôleur I2C (transfert) |
+| `0x17964` | `0xFF000000` | Masque AND (clear bas 24 bits) |
+| `0x17968` | `0x00010004` | Config I2C (mode 1, flags 4) |
+| `0x1796C` | `0x20000200` | Trigger I2C sub-cmd 3 |
+| `0x17970` | `0xDFFFFFFF` | Masque clear bit 29 |
+| `0x17974` | `0x30000200` | Trigger I2C sub-cmd 4/5 |
+| `0x17978` | `0x00010006` | Config I2C alternative |
+| `0x17108` | `0x0115A600` | Base SMUIO (Xtensa H2 → SMN 0x5A600) |
+| `0x17408` | `0x0217FE00` | Base CLK0 DPM (Xtensa CLK window) |
+| `0x17410` | `0x0257FE00` | Base CLK1 DPM (Xtensa CLK window) |
