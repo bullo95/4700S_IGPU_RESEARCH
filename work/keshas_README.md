@@ -1,0 +1,484 @@
+> **Project status: PAUSED.** Out of new ideas, and no longer willing to spend my free time on this. The project is on hold until new ideas worth my free time come along. Everything achieved so far is documented and committed — feel free to fork and continue. And don't be shy with new ideas, no matter how silly they may seem.
+
+# AMD BC-250 Windows Driver
+
+GPU driver for AMD BC-250 (Cyan Skillfish) on Windows 11 26100. WDM IOCTL driver with SMU mailbox, PSP ring, Vulkan ICD, and display support.
+
+**Goal:** fully working GPU driver for BC-250 on Windows.
+
+**Current build:** `4.3.0.18` (2026-10-01) — SMU Q0 read-only telemetry whitelist (incl. SoC/DRAM clock), `bc250-vitals.exe` read-only telemetry tool, two LPE/race fixes found in review.
+
+---
+
+## 🔥 2026-10-01: UEFI SMU bandymai — pagrindinis atradimas
+
+The UEFI-phase SMU unlock chain **works**, and that closes the "is there even a
+privileged path" question. See `docs\UEFI-SMU-PATCHING-AND-TELEMETRY.md` §1A.
+
+| Fact | Evidence |
+|---|---|
+| `unlock_smu()` completes in UEFI | `unlock_smu: OK` every run |
+| **SMN address == BAR5 offset** | `GPU_ID @0x0000 = 0x9FFF9700`, `SCRATCH @0x32D4 = 0x4D585042`, `GRBM_GFX_INDEX @0x34D0 = 0xBA062100` |
+| Privileged SMN **write** works | `write 0x0115A870 rc=1`, re-read identical |
+| Feature bit 6 toggles | `0xDD602C7D → 0xDD602C3D → 0xDD602C7D` |
+
+### Closed by these runs
+
+- **The privileged SMN route to SPI_PG is dead.** `write SMN 0x5C3C = 0x5A5A0000`
+  returns `rc=1` and the value does not change. The Data Fabric ACL that blocks
+  host writes blocks SMU writes too. `rc=1` only means the handler returned OK.
+- **Feature bit 6 is not the WGP gate.** It toggles cleanly, but `ActiveWgp`
+  stays 0 across the whole cycle. `SMU_FIRMWARE_OVERVIEW` §6 explains why: every
+  feature installs a periodic tick handler in `smu_tick_handlers[0x28]`, so the
+  bit being set does not mean anything is evaluating it.
+- **An unknown or read-only SMN address wedges the SMU.** `0x3D64` (RLC_PG) and
+  anything at `0x09010C3C` or above kills it — same failure as
+  `SMN 0x03B10A08` in Windows. After that *every* answer is wrong, including
+  addresses that just worked.
+
+Only four GC registers are known safe: `GPU_ID 0x0000`, `SCRATCH 0x32D4`,
+`GRBM_GFX_INDEX 0x34D0`, `SPI_PG 0x5C3C`. `RLC_PG 0x3D64` is not safe.
+
+### Next
+
+**`CC_ARRAY 0x9C1C` write.** The Windows driver found it partially writable
+(`0xFFF80000` → `0x1F000000`, bits 24-28 persisting). There is now a privileged
+path to it and the test has not been run. This is the 40 CU key.
+
+### Running the probe
+
+`uefi\wgp-test\build-msvc.bat` emits three binaries, so a SMU wedge in one test
+cannot destroy another's results: `bc250-wgp-chain.efi` (chain only),
+`bc250-wgp-probe.efi` (chain + tests) and `bc250-wgp-full.efi` (everything).
+Each stalls 20 s and returns `EFI_SUCCESS` rather than halting.
+
+Logging to a file does not work when launched as `BOOTX64.EFI` — the firmware
+reports the boot volume as unwritable. Run it from the UEFI Shell with a
+redirect instead:
+
+```
+fs0:\> bc250-wgp-probe.efi > probe2.txt
+```
+
+That works, and it has a second advantage: running both binaries in the *same*
+boot means `unlock_smu()` finds the SMU already unlocked, so values written by
+the first run are still in place for the second. A cold boot is needed after the
+SMU has been wedged.
+
+The build needs no Windows Kits — `msvc_compat.h` declares `_outpd`, `_inpd` and
+`__halt` by hand because `<intrin.h>` pulls in the UCRT headers through
+`xmmintrin.h`. This matters because the `F:` drive, which carries the Kits, has
+disappeared twice during the session.
+
+---
+
+## Governor ceilings are now evidence-based (4.3.0.17)
+
+The whitelist used to accept GPU frequencies up to 2500 MHz and CPU boost up to
+5000 MHz. Neither number had ever been reached on this board.
+
+| Limit | Was | Now | Evidence |
+|---|---|---|---|
+| GPU frequency | 2500 MHz | **2230 MHz** | `aidenonlinux/PS5-Arch` runs this same APU's GPU at 2230 MHz under a custom BIOS, and its `ps5_control` forces exactly that |
+| CPU boost | 5000 MHz | **4000 MHz** | Highest frequency reported stable with an explicit VID; `bc250_smu_oc` warns that CPU VID above 1.325V has bricked boards on this shared cooler |
+
+Four shader arrays behind a mining cooler will throttle or trip board protection
+long before the silicon gives up. Offering a range that has never worked only
+lets a user discover which of those happens, the expensive way.
+
+See `docs\PS5-AND-COMMUNITY-FINDINGS.md` for the full survey of what the PS5 and
+BC-250 community knows that applies here, and what does not.
+
+**The PS5 jailbreak route was searched.** Those exploits reach arbitrary physical
+memory by repointing a GPU page table entry and issuing PM4 DMA through `/dev/gc`.
+That requires a working GPU, which is the thing this project is trying to achieve,
+so the dependency runs in a circle and the technique cannot be the answer.
+
+But the search produced the most useful fact of the day: **the PS5 and the BC-250
+are the same chip.** The PS5's GPU identifies as `CYAN_SKILLFISH 0x1002:0x13FC`
+and loads the same `cyan_skillfish_*.bin` firmware this repository already ships.
+The console *does* have harvested CUs, and `mia/ps5-linux-patches` lifts them with
+the identical `SPI_PG_ENABLE_STATIC_WGP_MASK = 0x1F` write — against Sony's own
+firmware, where it takes.
+
+So our register offsets, bank encoding and write sequence are confirmed correct by
+comparison with a working reference on identical silicon, and the only remaining
+variable is this board's modified BIOS. That makes flashing the stock image a
+promising experiment rather than a long shot. See
+`docs\PS5-AND-COMMUNITY-FINDINGS.md`.
+
+---
+
+## Session 2026-09-30: WGP unlock — a properly controlled negative
+
+This is the most important section in the file, because it replaces two years of
+"the WGP gate is locked" verdicts that were never actually tested. Read it before
+repeating any of this work.
+
+### What was actually established
+
+| Fact | Evidence |
+|---|---|
+| This board is **BIOS 3.00**, PMFW/SMU **88.6.0** (Xtensa) | Q0 `0x02` returns `0x00580600`; `smu_fw_robin_1` in the community repo is byte-identical in version |
+| The SMU **Q2 mailbox works** through BAR5/NBIO | `probe 0x7B20` returned four distinct real values, not zeros |
+| The SMU **secure-access gate is already open at boot** | `SMU[0x7B3C] == 0` via a real read. The `bc250-smu-unlock` ring-corruption chain was therefore **not needed** |
+| **Arbitrary secure SMN read works** (Q3 `0x2A`) | `SMN[0x0115A870] = 0x000000FF` = 8 cores, matching the BIOS core unlock |
+| **MMIO read and write both work** | Positive control: `SCRATCH[0x32D4] = 0x4D585042` and `GRBM_GFX_INDEX` echoes what was written, on the same BAR5 |
+| **`SPI_PG_ENABLE_STATIC_WGP_MASK` rejects host writes** | The WGP init step executed for the first time ever, wrote `0x1F` to all four banks plus broadcast, and every readback was still `0` |
+
+### The WGP step had never actually run
+
+`HwInitMaxStep=1` — the safe cap this machine has run under for months — stopped
+the init sequence *before* the WGP step. Every "SPI_PG is locked" reading in the
+history was taken with that step disabled. The non-extended `Step 12b` in
+`amdbc250_dream_hw_init.c` is dead code on this configuration: `HwInitExtended=1`
+(the default) dispatches to `DreamV3HwInitializeExtended` in
+`amdbc250_dream_hw_init_extended.c`, which contains the real WGP step at its own
+number 12.
+
+`enable-wgp-test.bat` sets `HwInitMaxStep=12`, which runs steps 0b, 1, 2, 3, 4, 9,
+10, 6 and 12, then stops before 13 (RLC), 7/8 (rings) and 11 (display). That
+isolation matters: it reaches the WGP step while avoiding every step historically
+associated with 0x1A `MEMORY_MANAGEMENT` crashes and black screens.
+
+Result: `Step_HwInit = 0xC`, `full-init-test.exe` returned SUCCESS with no TDR and
+no black screen, and `SPI_PG` still read `0`.
+
+### Hypotheses that were tested and eliminated
+
+| Hypothesis | Verdict |
+|---|---|
+| Wrong `GRBM_GFX_INDEX` bank encoding | Eliminated. Nine encodings tried, including the Linux form with `INSTANCE_BROADCAST_WRITES` (bit 24). All read `0` |
+| MMIO writes do not land | Eliminated by positive control |
+| The WGP step had never executed | Was true until 2026-09-30; now proven to have run |
+| `RequestActiveWgp` (Q0 `0x18`) is the path | No. Accepted (`0x01 OK`) but the active count stays `0`. Cyan Skillfish does not implement that message — it is a Van Gogh leftover. Harvested CUs are not power gated either: `RLC_PG_CNTL = 0` |
+| A GC register exists in SMN space | Eliminated. `SMN[0x02405ED4]` (the SCRATCH beacon slot) reads `0` with status `OK` |
+| Feature 6 gates WGP requests | Feature 6 is **already set** (`features = 0xDD602C7D`). It was never the blocker |
+
+### The remaining lead: this board runs a modified BIOS
+
+```
+BC250_3.00_MeiMeiDXEv3.ROM   SHA256 3D982841…   <- installed, modified
+BC250_3.00_M.ROM             SHA256 3D982841…   <- identical to the above
+BC250_3.00_CHIPSETMENU.ROM   SHA256 48FBE5D3…   <- stock, different
+```
+
+The community's 40 CU unlock performs the same MMIO write from Linux amdgpu and it
+works there, so the block is not purely electrical — something about the
+environment differs. A modified BIOS carries a different PSP/SOS image and
+therefore a different data-fabric ACL. That is the one concrete hypothesis left,
+and it is testable by flashing the stock image.
+
+### ⛔ Hard safety rule learned the expensive way
+
+**Never read the SMU's own mailbox block (`SMN 0x03B1xxxx`) through Q3 `0x2A`.**
+`0x03B10A08` is C2PMSG_66 itself. Reading it is self-referential and hung the SMU:
+Q0, Q2 and every Q3 message stopped answering, `probe` returned `gle=31`, and
+recovery required an **AC power cycle**. A soft restart did not recover it and left
+a black screen. Use Q2 `0x0A` for SRAM access instead — it never failed once.
+
+### New tooling
+
+`test-tools\smu-unlock-staged.c` → `output\smu-unlock-staged.exe`:
+
+| Command | Purpose |
+|---|---|
+| `probe [addr]` | Read-only. SMU version, gate byte, and four dwords of SMU SRAM |
+| `verify` | Read-only. Gate state plus one secure-SMN probe |
+| `fstatus` | Read-only. Feature mask and active WGP count |
+| `wgp <0..18>` | Sets the active compute-unit count via Q0 `0x18` |
+| `feature6 on\|off` | Sets or clears SMU feature bit 6 (only that bit is reachable) |
+| `bankprobe` | Writes only `0x00`/`0x07` to SPI_PG under nine index encodings, with a positive control. Never writes `0x1F` |
+| `sramdiff [n]` | Snapshots SRAM before and after a WGP request and reports what moved |
+| `smnread` / `secprobe` | Secure SMN read. **Avoid `0x03B1xxxx`** |
+| `selftest` | Confirms the whitelist refuses the dangerous messages |
+
+The whitelist admits only six messages: Q2 `0x05`/`0x06` (feature bit 6 only),
+Q2 `0x0A` (address pinned to the driver's own staging page), Q3 `0x22` (only when
+unlocked) and Q3 `0x2A` (only when unlocked). The secure SMN **write** pair
+`0x2B`/`0x2C` is deliberately not whitelisted.
+
+---
+
+## Session 2026-09-23 (this tree): pa_v1, governor, Vulkan ICD draw
+
+| Deliverable | Tool | Result |
+|-------------|------|--------|
+| pa_v1 mailbox (PSP BAR2) | `pa-v1-diag2` | **PASS** — bootloader `0x001C0102`, feature `2`; **BAR2=`0xFE700000`**, BAR0=0 |
+| GPU governor service | `governor-service` | **OK** — set 1600 MHz + unforce (governor sequence) |
+| Vulkan ICD pipeline draw | `vk-draw-test` | **PASS** — GIPA→instance→`DRAW_INDEX_AUTO`→`vkQueueSubmit`, EXIT=0 |
+
+**ICD:** `bc250_icd_stub.dll` exposes **7 ICD exports** (`src/vulkan/bc250_vulkan.def`); `vkCreateInstance` resolved via `vk_icdGetInstanceProcAddr`. Test: `test-tools/vk-draw-test.c` + `compile-vk-draw-test.bat`.
+
+**PSP companion:** BAR2 auto-init fix in [PSP repo](https://github.com/Keshas-dev/AMD-BC-250-PSP-Windows-Driver) — reinstall PSP after that build.
+
+---
+
+## Deadlock fix (2026-09-23) — verified on hardware
+
+### Root cause
+`IOCTL_AMDBC250_INIT_HARDWARE` (full-init, `Flags=0`) held `DeviceMutex` while calling `DreamV3HwInitialize` → `Amdbc250PspKiqInit` → `PspProxyInit` → PSP `GET_GPU_INFO` → GPU proxy `0x900` re-acquired the **same non-recursive FastMutex** → **permanent hang** (process stuck in kernel; only reboot could kill it).
+
+### Fix (`src/kmd/amdbc250_dream_kmd.c` case `0x80000B80`)
+1. **NBIO_MAP path** (`Flags & AMDBC250_INIT_FLAG_NBIO_MAP`): `Amdbc250PspKiqInit` removed entirely; `KiqAvailable=FALSE` — PSP proxy works via `0x900` without KIQ.
+2. **Full INIT path** (`Flags=0`): set `HwInitInProgress=TRUE` under mutex → **release** before `DreamV3HwInitialize` → **re-acquire** after to set `HardwareInitialized=TRUE`, clear flag, release.
+3. Concurrent INIT while full init in progress → `STATUS_DEVICE_BUSY` (re-entry guard).
+4. `HwInitInProgress` flag added in `inc/amdbc250_dream_kmd.h`.
+
+### Verified (2026-09-23, all on installed 4.3.0.11)
+```
+gpu-init-explicit.exe   ✅  INIT OK br=32, GPU_ID=0x9FFF9700, GRBM=0x00000000, process exits
+full-init-test.exe      ✅  SUCCESS — no TDR, Step_HwInit=11, process exits
+test-psp-driver.exe -s  ✅  PSP Alive YES, C2PMSG_64=0x80000000, C2PMSG_81=0x002C7A89
+spi-pg-nbio-test.exe -r ✅  SPI_PG=0 [gated, expected], SMU Q0 0x3D=0xDD602C7D, 1500MHz
+bar5-smn-test.exe       ✅  SMU 88.6.0, Features=0xDD602C7D, ActiveWgp=0
+smu-all-msgs-test.exe   ✅  16/16 (7 reads + 9 writes, no wedge)
+psp-ring-submit-test    ✅  RING_INIT Result=1, GET_FW_ATTESTATION SUCCESS, WPTR advances
+```
+
+**Installed SHA256:** `0E69D7D3FC8E934E6ACDA5467BD543A13D1600BCEEBB0EA313305851A8B30D4B` (matches `output\atikmdag.sys`).
+
+---
+
+## PSP / CCP notes from Linux (2026-09-23)
+
+BC-250 carries **AMD Secure Processor at PCI `1022:143E`**. Upstream Linux `ccp` patch series (Mattia Tadini, Sep 2026) binds it with a **device-read register map** — useful for our Windows PSP path:
+
+| Fact | Detail |
+|------|--------|
+| Layout | **pspv3/pspv4** (not pspv1, not pspv5–v7) |
+| BAR windows | `fe700000` 1MB + `fe884000` 8KB (Linux binds via **BAR2**) |
+| Mailbox cmdresp | BAR2+`0x10544` = `0x80000000` (live) |
+| Bootloader | BAR2+`0x109EC` (C2PMSG_59) = `0x001C0102` → version **00.1c.01.02** |
+| Feature reg | BAR2+`0x109FC` (C2PMSG_63) = `0x00000002` |
+| Inten / Intsts | BAR2+`0x10690` / `0x10694` (P2CMSG_*) |
+| CCP engine | **None** — version @ `0x100` reads `0xFFFFFFFF` |
+| TEE | Capability bit set, but **`PSP_CMD_TEE_RING_INIT` times out** — no TEE ring |
+| SEV | Absent |
+| Working path | **Platform access only** — mailbox **`pa_v1` = C2PMSG_28..30**, independent of TEE |
+| DBC (dyn boost) | Msg `0x65` rejected (`PSP error 0x4`) — probe continues |
+| HSTI | Empty (security reporting bit clear) |
+| After bind (Linux dmesg) | `platform access enabled` → `psp enabled` → bootloader sysfs OK |
+
+**Why it matters:** PSP platform mailbox can answer without TEE; on this APU (CPU+GPU+VRAM on one die) it may be able to activate register/fabric/power domains that SMU feature bits alone did not open (WGP/VCN locks). Windows work: map `pspv_bc250` offsets + probe **C2PMSG_28..30**, skip TEE ring wait.
+
+**External references:**
+- LKML: `[PATCH 0/3] crypto: ccp - two PSP init fixes, and the AMD BC-250` (2026-09-19)
+- GitHub: [blackbearreloaded/ps5-gpu-research](https://github.com/blackbearreloaded/ps5-gpu-research) — PS5 RDNA2 Mesa GL/compute research (arch reference)
+- Mesa: work item [11982](https://gitlab.freedesktop.org/mesa/mesa/-/work_items/11982), MRs [33109](https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/33109), [33116](https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/33116) (browser-only; Anubis blocks agents)
+
+---
+
+## PSP ↔ GPU coexistence (2026-09-23)
+
+Two PCI devices must not fight over GPU BAR5:
+
+| Device | BAR | Owner |
+|--------|-----|-------|
+| GPU `1002:13FE` | BAR5 **`0xFE800000`** | **atikmdag only** (`DeviceMutex`) |
+| PSP `1022:143E` | BAR0 **`0xFE700000`** | **PspDriver** (own window; future pa_v1 C2PMSG_28..30) |
+
+**Bug:** PSP `IOCTL_PSP_INIT_HW` dual-mapped GPU BAR5 → **4× BSOD 0x1E** (A/B confirmed).  
+**Fix (this repo):** proxy cases **`0x900`/`0x901`** in `amdbc250_dream_kmd.c` now take **`ExAcquireFastMutex(&DevExt->DeviceMutex)`** so PSP MMIO serializes with GPU's own BAR5 access.  
+**Fix (PSP repo):** never maps `0xFE800000`; all GPU access via proxy. See PSP `README.md` / `AGENTS.md` (2026-09-23).
+
+Install order: **GPU first**, then PSP. Full notes: `AGENTS.md` "PSP ↔ GPU coexistence".
+
+---
+
+## Current Status (2026-09-23) — deadlock fix verified
+
+### ✅ Verified Working (all tested on hardware)
+
+| Feature | Details |
+|---------|---------|
+| **Vulkan ICD pipeline** | `vkCreateInstance→Enumerate→Alloc→Map→CreateBuffer→Bind→Submit→Wait` ✅ VK_SUCCESS. GPU0 AMD BC-250 (RADV Stub), API 1.2.0 |
+| **SMU all messages** | **16/16 PASS**, 0 wedge — 7 reads + 9 writes with wedge check |
+| **SMU CPU OC** | Q3 0x50/0x8B/0x8C/0x8F — all OK, persist after reboot. 8 cores @ 3500MHz |
+| **SMU frequency/voltage** | 1500MHz @ 931mV base, governor sequence safe |
+| **SMU SRAM** | Q3 0x28/0x29 whitelisted — write-only (SMU-internal) |
+| **PSP GPCOM ring** | INIT/SUBMIT/LOAD_IP_FW/SETUP_TMR all verified on hardware. `GET_FW_ATTESTATION` = SUCCESS |
+| **PSP firmware loading** | DIRECT C2PMSG (base 0x58000): psp-fw-load 8/8, psp-tos-test PASS |
+| **KMDOD display** | 2560x1440, Status OK, CM_ERR=0 |
+| **BAR5 MMIO** | `DreamV3WriteRegister/ReadRegister` via `WRITE_REGISTER_ULONG` |
+| **CPU core unlock** | SMU Q3 0x98 → SMN 0x0115A870 (6→8 cores, volatile, reboot reverts) |
+| **CC_ARRAY** | Partially writable (bits 24-28: 0x1F000000), persists across boots |
+| **VRAM info** | `GetVramInfo` returns Total=Visible=16GB after KMD fix |
+| **Driver stability** | 50-iteration stress test, 0 failures, 0 wedge events |
+
+### ❌ Blocked
+
+| Feature | Blocker |
+|---------|---------|
+| **3D graphics** | WGP/SPI_PG locked against host BAR5. **Not hardware-fused** — Linux amdgpu runs shaders. |
+| **WGP unlock on Windows** | **Tested properly 2026-09-30.** The WGP init step was finally executed (it had never run before, because `HwInitMaxStep=1` stopped short of it) and `SPI_PG` still read `0`. MMIO read/write proven working by positive control. See the top section. |
+| **WGP unlock via EFI** | **CONFIRMED BLOCKED** (2026-09-15) — NBIO locked at EFI boot on this unit. `third-party/EFI_Boot/WGP_unlock.nsh` does not work here. |
+| **WGP unlock via Linux** | Works via debugfs/kernel context — not replicable on Windows WDM |
+| **Remaining WGP lead** | This board runs a **modified** BIOS (`MeiMeiDXEv3`). A stock image is on disk. The ACL may come from the mod rather than the silicon. |
+| **SDMA** | Ring not initialized, firmware broken (stock v0x34). navi12_sdma.bin works on Linux. |
+| **Compute rings** | KIQ_SIZE=0 (read-only), ring BASE registers SOS-locked |
+
+### Test Results (2026-09-15 + re-run 2026-09-23 + 2026-09-30)
+
+```
+smu-all-msgs-test.exe     ✅  16/16 PASS, 0 wedge (re-run 2026-09-23)
+vk-minimal-test.exe       ✅  VK_SUCCESS, GPU0 AMD BC-250 API 1.2.0
+smu-cpu-msg-test.exe      ✅  8 cores @ 3500MHz (re-run 2026-09-23: 1212mV, all OK)
+smu-stress-test.exe       ✅  50 iterations, 0 failures
+psp-ring-submit-test.exe  ✅  RING_INIT + GET_FW_ATTESTATION SUCCESS (re-run 2026-09-23)
+gpu-init-explicit.exe     ✅  NBIO_MAP INIT OK, no deadlock (2026-09-23)
+full-init-test.exe        ✅  Flags=0 SUCCESS, no TDR (2026-09-30, WGP step cap 12)
+vulkaninfoSDK.exe         ✅  vendor 0x1002, device 0x13fe, discrete GPU
+
+smu-unlock-staged selftest ✅  6/6 dangerous messages refused by the whitelist
+smu-unlock-staged probe    ✅  SMU 0x00580600, gate 0x7B3C=0, Q2 0x0A reads SRAM
+smu-unlock-staged bankprobe✅  MMIO read/write proven; SPI_PG=0 under 9 encodings
+```
+
+---
+
+## Build & Install
+
+### Prerequisites
+- Visual Studio 2022 (auto-detected; **F:** on this host — `F:\Program Files\Microsoft Visual Studio\2022\Community`)
+- Windows WDK 10.0.26100.0 (`F:\Program Files (x86)\Windows Kits\10`)
+- Test signing: `bcdedit /set testsigning on` (Admin), Secure Boot OFF
+
+### Build
+```cmd
+build.bat
+```
+Output: `output\atikmdag.sys`, `output\amdbc250umd64.dll`, INF, CAT
+
+### Install (Admin)
+```
+1. Device Manager → AMD Radeon BC-250 → Uninstall (check "Delete driver")
+2. Reboot
+3. Device Manager → Update Driver → Browse → output\amdbc250_dream.inf
+4. Reboot
+```
+
+### Quick Test
+```cmd
+output\smu-all-msgs-test.exe          # SMU verification
+output\bar5-smn-test.exe              # SMU mailbox via SMN
+output\psp-ring-submit-test.exe       # PSP GPCOM ring
+output\vk-minimal-test.exe            # Vulkan pipeline
+```
+
+---
+
+## Hardware Facts
+
+- **SoC:** BC-250 (Cyan Skillfish) — RDNA2, 16GB GDDR6 UMA
+- **GPU ID:** 0x13FE (PCI), 0x9FFF9700 (internal)
+- **40 CU die, 24 active** (harvest mask) — NOT fused, Linux unlocks 40
+- **GC_BASE:** 0x1260 (BC-250 shifted offsets vs Navi10)
+- **GPU BAR5:** 0xFE800000 (512KB MMIO)
+- **SMU version:** 88.6.0 (driver_if=8)
+- **PSP IP:** v11.0.8 (CYAN_SKILLFISH2) — GPU-side MP0 ring @ BAR5 `0x58000`
+- **PSP/CCP PCI:** `1022:143E` @ 01:00.2 — pspv3 layout, platform mailbox `pa_v1` (C2PMSG_28..30), bootloader `00.1c.01.02`, no CCP engine, no TEE ring
+- **BIOS:** P4.00G, **IOMMU must be OFF**
+
+---
+
+## Architecture
+
+```
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  Vulkan ICD  │───▶│  KMD IOCTL   │───▶│  atikmdag.sys│
+│  bc250_icd   │    │  0x8000xxxx  │    │  (kernel)    │
+└──────────────┘    └──────────────┘    └──────┬───────┘
+                                                │
+                    ┌───────────────────────────┤
+                    │    │    │    │    │    │
+                 ┌──▼┐┌▼──┐┌▼──┐┌▼──┐┌▼──┐┌▼──┐
+                 │BAR5│ │SMN│ │PSP│ │CMOS│ │SMU│ │IOCTL│
+                 │    │ │   │ │   │ │    │ │   │ │     │
+                 └───┘ └───┘ └───┘ └───┘ └───┘ └─────┘
+```
+
+| Layer | Path | IOCTL | Purpose |
+|-------|------|-------|---------|
+| Memory | ALLOC/FREE/MAP_VIDMEM | 0x80000820-828 | UserMode VRAM staging |
+| Registers | READ_REG/WRITE_REG | 0x80000010-14 | BAR5 GPU register access |
+| SMN | SMN_READ/WRITE | 0x80000C30-34 | NBIO 0x38/0x3C SMN window |
+| SMU | SMU_MSG | 0x80000924 | SMU mailbox (Q0/Q2/Q3) |
+| PSP | PSP_PROXY | 0x80000900-901 | PSP register proxy |
+| CPU OC | SMU_CPU_MSG | 0x80000C2C | Q3 0x50/0x8F/0x8B/0x8C |
+| CMOS | CMOS_ACCESS | 0x80000C28 | MemConf_t read/write |
+| PSP ring | PSP_RING_* | 0x80000C18/1C/20/24 | GPCOM ring (verified) |
+| Submit | SUBMIT_COMMANDS | 0x80000880 | PM4 command submission |
+| Vulkan | SUBMIT_COMMANDS | 0x80000880 | RADV → KMD via IOCTL |
+
+---
+
+## Key Documentation
+
+| File | Content |
+|------|---------|
+| **AGENTS.md** | Agent memory — hardware facts, blockers, test results (DETAILED) |
+| **docs/INSTALL-GUIDE.md** | Build/install/test steps for admin |
+| **docs/WGP-UNLOCK-STATUS.md** | WGP unlock: all 9 methods tested, all blocked |
+| **docs/RADV-KMD-INTEGRATION.md** | Vulkan ICD → KMD IOCTL mapping |
+| **docs/PSP-GPCOM-RING-WORKING.md** | PSP ring — offsets, IOCTLs, verification |
+| **docs/BC250-LINUX-IP-MAP.md** | Linux-verified IP base addresses |
+
+---
+
+## File Structure
+
+```
+├── src/kmd/                    # Kernel driver (atikmdag.sys)
+│   ├── amdbc250_dream_kmd.c   # DriverEntry, IOCTL dispatch, PSP ring
+│   ├── amdbc250_dream_hw_init.c
+│   ├── amdbc250_psp.c          # PSP proxy
+│   └── ...
+├── src/umd/                    # User-mode driver (D3D9 DDI)
+├── src/vulkan/                 # Vulkan ICD stub (bc250_icd_stub.dll)
+│   ├── bc250_vulkan_icd.c
+│   └── bc250_vulkan.h
+├── inc/                        # Headers (ioctl defs, HW regs)
+├── test-tools/                 # Diagnostic tools (source + .exe)
+├── output/                     # Build outputs (signed drivers + test tools)
+├── docs/                       # Technical docs (INSTALL, WGP, RADV, etc.)
+├── firmware/                   # Firmware blobs
+├── third-party/EFI_Boot/       # EFI scripts (DOES NOT WORK on this unit)
+├── build.bat                   # Build + sign
+└── .gitignore
+```
+
+---
+
+## Registry Settings (fail-closed)
+
+All under `HKLM\SYSTEM\CurrentControlSet\Services\atikmdag` (DWORD).
+**Critical:** `DisplayWritesEnabled=0` (live DCN writes black-screen GPU). `HwInitMemCtrl=0` (freeze zone crash). `HwInitGart=0` / `HwInitVm=0` (0x1A BSOD).
+
+---
+
+## Next Steps
+
+1. **RADV integration** — RADV PM4 → `vkQueueSubmit` → IOCTL_AMDBC250_SUBMIT_COMMANDS (KMD backend ready, WGP blocks actual execution)
+2. **SDMA via ring** — load navi12_sdma.bin (type 9/10) through PSP ring
+3. **Real WDDM miniport** — wddm-ps5 project (displib.lib path)
+4. **BIOS NBIO unlock** — only path to WGP on this unit
+
+---
+
+## External Resources
+
+- **GitHub:** https://github.com/Keshas-dev/AMD-BC-250-Windows-Driver
+- **PSP Driver:** https://github.com/Keshas-dev/AMD-BC-250-PSP-Windows-Driver (deprecated — merged into GPU driver)
+- **Linux Kernel:** https://github.com/torvalds/linux (drivers/gpu/drm/amd/amdgpu)
+- **elektricM/amd-bc250-docs** — Community BC-250 docs (Mesa 25.1+, RADV, VRAM config)
+- **duggasco/bc250-40cu-unlock** — 40 CU unlock via Linux kernel patch
+- **rw-r-r-0644/bc250-core-unlock** — CPU core unlock via SMU Q3 0x98
+
+---
+
+## License
+
+Educational purposes. Use at your own risk.
+
+## "If you need a tool and nobody has built it yet, then build it yourself."

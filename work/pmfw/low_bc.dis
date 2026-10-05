@@ -1,0 +1,1379 @@
+            0x00000000      ssxu f0, a6, a0
+            0x00000003      excw
+            0x00000006      l32i.n a5, a0, 0
+            0x00000008      ill
+            0x0000000b      ill
+            0x0000000e      ill
+            0x00000011      ill
+            0x00000014      ill
+            0x00000017      ill
+            0x0000001a      ill
+            0x0000001d      ill
+            0x00000020      ill
+            0x00000023      ill
+            0x00000026      ill
+            0x00000029      ill
+            0x0000002c      ill
+            0x0000002f      ill
+            0x00000032      ill
+            0x00000035      ill
+            0x00000038      ill
+            0x0000003b      ill
+            0x0000003e      ill
+            0x00000041      ill
+            0x00000044      ill
+            0x00000047      ill
+            0x0000004a      ill
+            0x0000004d      ill
+            0x00000050      ill
+            0x00000053      ill
+            0x00000056      ill
+            0x00000059      ill
+            0x0000005c      ill
+            0x0000005f      ill
+            0x00000062      ill
+            0x00000065      ill
+            0x00000068      ill
+            0x0000006b      ill
+            0x0000006e      ill
+            0x00000071      ill
+            0x00000074      ill
+            0x00000077      ill
+            0x0000007a      ill
+            0x0000007d      ill
+            0x00000080      ill
+            0x00000083      ill
+            0x00000086      ill
+            0x00000089      ill
+            0x0000008c      ill
+            0x0000008f      ill
+            0x00000092      ill
+            0x00000095      ill
+            0x00000098      ill
+            0x0000009b      ill
+            0x0000009e      ill
+            0x000000a1      ill
+            0x000000a4      ill
+            0x000000a7      ill
+            0x000000aa      ill
+            0x000000ad      ill
+            0x000000b0      ill
+            0x000000b3      ill
+            0x000000b6      ill
+            0x000000b9      ill
+            0x000000bc      ill
+            0x000000bf      ill
+            0x000000c2      ill
+            0x000000c5      ill
+            0x000000c8      ill
+            0x000000cb      ill
+            0x000000ce      ill
+            0x000000d1      ill
+            0x000000d4      ill
+            0x000000d7      ill
+            0x000000da      ill
+            0x000000dd      ill
+            0x000000e0      ill
+            0x000000e3      ill
+            0x000000e6      ill
+            0x000000e9      ill
+            0x000000ec      ill
+            0x000000ef      ill
+            0x000000f2      ill
+            0x000000f5      ill
+            0x000000f8      ill
+            0x000000fb      ill
+            0x000000fe      excw
+            0x00000101      movi.n a0, 0
+            0x00000103      ill
+            0x00000106      ill
+            0x00000109      l32i.n a0, a0, 0
+            0x0000010b      and a0, a0, a0
+            0x0000010e      ill
+            0x00000111      l32i.n a0, a0, 0
+            0x00000113      ill
+            0x00000116      l8ui a0, a0, 6
+            0x00000119      or a0, a0, a0
+            0x0000011c      sub a0, a0, a0
+            0x0000011f      { slli a14, a3, 17; excw }
+            0x00000127      ill
+            0x0000012a      andb b2, b0, b0
+            0x0000012d      or a0, a0, a0
+            0x00000130      ill
+            0x00000133      l32r a0, 0xfffc0164
+            0x00000136      wsr.intenable a0
+            0x00000139      l32r a2, 0x00000104                        ; [0x104:4]=0
+            0x0000013c      rsr.prid a3
+            0x0000013f      extui a3, a3, 0, 8
+        ,=< 0x00000142      beqz.n a2, 0x00000148
+       ,==< 0x00000144      bnez.n a3, 0x00000148
+       ||   0x00000146      s32i.n a0, a2, 0
+       ``-> 0x00000148      l32r a2, 0x00000108                        ; [0x108:4]=0x800
+            0x0000014b      wsr.vecbase a2
+            0x0000014e      movi.n a3, 21
+            0x00000150      excw
+            0x00000153      rsil a2, 1
+            0x00000156      l32r a2, 0x0000010c                        ; [0x10c:4]=0x1000
+            0x00000159      movi.n a3, 0
+        .-> 0x0000015b      iiu a3, 0
+        :   0x0000015e      iiu a3, 32
+        :   0x00000161      addi a3, a3, 64
+        `=< 0x00000164      bltu a3, a2, 0x0000015b
+            0x00000167      isync
+            0x0000016a      l32r a2, 0x00000110                        ; [0x110:4]=0x800
+            0x0000016d      movi.n a3, 0
+        .-> 0x0000016f      iii a3, 0
+        :   0x00000172      iii a3, 32
+        :   0x00000175      addi a3, a3, 64
+        `=< 0x00000178      bltu a3, a2, 0x0000016f
+            0x0000017b      isync
+            0x0000017e      l32r a2, 0x0000010c                        ; [0x10c:4]=0x1000
+            0x00000181      movi.n a3, 0
+        .-> 0x00000183      diu a3, 0
+        :   0x00000186      diu a3, 16
+        :   0x00000189      diu a3, 32
+        :   0x0000018c      diu a3, 48
+        :   0x0000018f      addi a3, a3, 64
+        `=< 0x00000192      bltu a3, a2, 0x00000183
+            0x00000195      l32r a2, 0x00000110                        ; [0x110:4]=0x800
+            0x00000198      movi.n a3, 0
+        .-> 0x0000019a      dii a3, 0
+        :   0x0000019d      dii a3, 16
+        :   0x000001a0      dii a3, 32
+        :   0x000001a3      dii a3, 48
+        :   0x000001a6      addi a3, a3, 64
+        `=< 0x000001a9      bltu a3, a2, 0x0000019a
+            0x000001ac      movi.n a2, 0
+            0x000001ae      wsr.itlbcfg a2
+            0x000001b1      isync
+            0x000001b4      l32r a2, 0x00000114                        ; [0x114:4]=0x20000
+            0x000001b7      wsr.dtlbcfg a2
+            0x000001ba      dsync
+            0x000001bd      movi.n a7, 7
+            0x000001bf      l32r a4, 0x00000118                        ; [0x118:4]=0x20000006
+            0x000001c2      witlb a7, a4
+            0x000001c5      isync
+            0x000001c8      wdtlb a7, a4
+            0x000001cb      dsync
+            0x000001ce      l32r a5, 0x0000011c                        ; [0x11c:4]=0xffc00000
+            0x000001d1      wsr.ptevaddr a5
+            0x000001d4      l32r a14, 0x00000120                       ; [0x120:4]=483
+            0x000001d7      l32r a3, 0x00000124                        ; [0x124:4]=0x500
+            0x000001da      l32r a5, 0x00000128                        ; [0x128:4]=0x20000000
+            0x000001dd      or a3, a3, a5
+            0x000001e0      jx a3
+            0x000001e3      l32r a7, 0x0000012c                        ; [0x12c:4]=0x20000002
+            0x000001e6      l32r a4, 0x00000118                        ; [0x118:4]=0x20000006
+            0x000001e9      wdtlb a7, a4
+            0x000001ec      dsync
+            0x000001ef      l32r a2, 0x00000130                        ; [0x130:4]=0x1000000
+            0x000001f2      l32r a5, 0x00000130                        ; [0x130:4]=0x1000000
+            0x000001f5      movi.n a3, 2
+            0x000001f7      movi.n a4, 0
+        .-> 0x000001f9      add.n a6, a5, a3
+        :   0x000001fb      addi.n a7, a5, 4
+        :   0x000001fd      wdtlb a6, a7
+        :   0x00000200      dsync
+        :   0x00000203      add.n a5, a5, a2
+        :   0x00000205      addi.n a4, a4, 1
+        `=< 0x00000207      bltui a4, 3, 0x000001f9
+            0x0000020a      movi.n a1, 1
+            0x0000020c      wsr.windowstart a1
+            0x0000020f      wsr.windowbase a0
+            0x00000212      rsync
+            0x00000215      movi.n a0, 0
+            0x00000217      call0 0x00002b78
+            0x0000021a      ill
+            0x0000021d      ill
+            0x00000220      ill
+            0x00000223      ill
+            0x00000226      ill
+            0x00000229      ill
+            0x0000022c      ill
+            0x0000022f      ill
+            0x00000232      ill
+            0x00000235      ill
+            0x00000238      ill
+            0x0000023b      ill
+            0x0000023e      ill
+            0x00000241      ill
+            0x00000244      ill
+            0x00000247      ill
+            0x0000024a      ill
+            0x0000024d      ill
+            0x00000250      ill
+            0x00000253      ill
+            0x00000256      ill
+            0x00000259      ill
+            0x0000025c      ill
+            0x0000025f      ill
+            0x00000262      ill
+            0x00000265      ill
+            0x00000268      ill
+            0x0000026b      ill
+            0x0000026e      ill
+            0x00000271      ill
+            0x00000274      ill
+            0x00000277      ill
+            0x0000027a      ill
+            0x0000027d      ill
+            0x00000280      ill
+            0x00000283      ill
+            0x00000286      ill
+            0x00000289      ill
+            0x0000028c      ill
+            0x0000028f      ill
+            0x00000292      ill
+            0x00000295      ill
+            0x00000298      ill
+            0x0000029b      ill
+            0x0000029e      ill
+            0x000002a1      ill
+            0x000002a4      ill
+            0x000002a7      ill
+            0x000002aa      ill
+            0x000002ad      ill
+            0x000002b0      ill
+            0x000002b3      ill
+            0x000002b6      ill
+            0x000002b9      ill
+            0x000002bc      ill
+            0x000002bf      ill
+            0x000002c2      ill
+            0x000002c5      ill
+            0x000002c8      ill
+            0x000002cb      ill
+            0x000002ce      ill
+            0x000002d1      ill
+            0x000002d4      ill
+            0x000002d7      ill
+            0x000002da      ill
+            0x000002dd      ill
+            0x000002e0      ill
+            0x000002e3      ill
+            0x000002e6      ill
+            0x000002e9      ill
+            0x000002ec      ill
+            0x000002ef      ill
+            0x000002f2      ill
+            0x000002f5      ill
+            0x000002f8      ill
+            0x000002fb      ill
+            0x000002fe      ill
+            0x00000301      ill
+            0x00000304      ill
+            0x00000307      ill
+            0x0000030a      ill
+            0x0000030d      ill
+            0x00000310      ill
+            0x00000313      ill
+            0x00000316      ill
+            0x00000319      ill
+            0x0000031c      ill
+            0x0000031f      ill
+            0x00000322      ill
+            0x00000325      ill
+            0x00000328      ill
+            0x0000032b      ill
+            0x0000032e      ill
+            0x00000331      ill
+            0x00000334      ill
+            0x00000337      ill
+            0x0000033a      ill
+            0x0000033d      ill
+            0x00000340      ill
+            0x00000343      ill
+            0x00000346      ill
+            0x00000349      ill
+            0x0000034c      ill
+            0x0000034f      ill
+            0x00000352      ill
+            0x00000355      ill
+            0x00000358      ill
+            0x0000035b      ill
+            0x0000035e      ill
+            0x00000361      ill
+            0x00000364      ill
+            0x00000367      ill
+            0x0000036a      ill
+            0x0000036d      ill
+            0x00000370      ill
+            0x00000373      ill
+            0x00000376      ill
+            0x00000379      ill
+            0x0000037c      ill
+            0x0000037f      ill
+            0x00000382      ill
+            0x00000385      ill
+            0x00000388      ill
+            0x0000038b      ill
+            0x0000038e      ill
+            0x00000391      ill
+            0x00000394      ill
+            0x00000397      ill
+            0x0000039a      ill
+            0x0000039d      ill
+            0x000003a0      ill
+            0x000003a3      ill
+            0x000003a6      ill
+            0x000003a9      ill
+            0x000003ac      ill
+            0x000003af      ill
+            0x000003b2      ill
+            0x000003b5      ill
+            0x000003b8      ill
+            0x000003bb      ill
+            0x000003be      ill
+            0x000003c1      ill
+            0x000003c4      ill
+            0x000003c7      ill
+            0x000003ca      ill
+            0x000003cd      ill
+            0x000003d0      ill
+            0x000003d3      ill
+            0x000003d6      ill
+            0x000003d9      ill
+            0x000003dc      ill
+            0x000003df      ill
+            0x000003e2      ill
+            0x000003e5      ill
+            0x000003e8      ill
+            0x000003eb      ill
+            0x000003ee      ill
+            0x000003f1      ill
+            0x000003f4      ill
+            0x000003f7      ill
+            0x000003fa      ill
+            0x000003fd      ill
+            0x00000400      ill
+            0x00000403      ill
+            0x00000406      ill
+            0x00000409      ill
+            0x0000040c      ill
+            0x0000040f      ill
+            0x00000412      ill
+            0x00000415      ill
+            0x00000418      ill
+            0x0000041b      ill
+            0x0000041e      ill
+            0x00000421      ill
+            0x00000424      ill
+            0x00000427      ill
+            0x0000042a      ill
+            0x0000042d      ill
+            0x00000430      ill
+            0x00000433      ill
+            0x00000436      ill
+            0x00000439      ill
+            0x0000043c      ill
+            0x0000043f      ill
+            0x00000442      ill
+            0x00000445      ill
+            0x00000448      ill
+            0x0000044b      ill
+            0x0000044e      ill
+            0x00000451      ill
+            0x00000454      ill
+            0x00000457      ill
+            0x0000045a      ill
+            0x0000045d      ill
+            0x00000460      ill
+            0x00000463      ill
+            0x00000466      ill
+            0x00000469      ill
+            0x0000046c      ill
+            0x0000046f      ill
+            0x00000472      ill
+            0x00000475      ill
+            0x00000478      ill
+            0x0000047b      ill
+            0x0000047e      ill
+            0x00000481      ill
+            0x00000484      ill
+            0x00000487      ill
+            0x0000048a      ill
+            0x0000048d      ill
+            0x00000490      ill
+            0x00000493      ill
+            0x00000496      ill
+            0x00000499      ill
+            0x0000049c      ill
+            0x0000049f      ill
+            0x000004a2      ill
+            0x000004a5      ill
+            0x000004a8      ill
+            0x000004ab      ill
+            0x000004ae      ill
+            0x000004b1      ill
+            0x000004b4      ill
+            0x000004b7      ill
+            0x000004ba      ill
+            0x000004bd      ill
+            0x000004c0      ill
+            0x000004c3      ill
+            0x000004c6      ill
+            0x000004c9      ill
+            0x000004cc      ill
+            0x000004cf      ill
+            0x000004d2      ill
+            0x000004d5      ill
+            0x000004d8      ill
+            0x000004db      ill
+            0x000004de      ill
+            0x000004e1      ill
+            0x000004e4      ill
+            0x000004e7      ill
+            0x000004ea      ill
+            0x000004ed      ill
+            0x000004f0      ill
+            0x000004f3      ill
+            0x000004f6      ill
+            0x000004f9      ill
+            0x000004fc      ill
+            0x000004ff      andb b0, b12, b0
+            0x00000502      movi.n a5, 0
+            0x00000504      movi.n a3, 6
+            0x00000506      add.n a6, a5, a3
+            0x00000508      addi.n a7, a5, 4
+            0x0000050a      wdtlb a6, a7
+            0x0000050d      dsync
+            0x00000510      movi.n a2, 0
+            0x00000512      movi.n a5, 0
+            0x00000514      movi.n a3, 5
+            0x00000516      add.n a6, a5, a3
+            0x00000518      addi.n a7, a5, 4
+            0x0000051a      witlb a6, a7
+            0x0000051d      isync
+            0x00000520      movi.n a2, 6
+            0x00000522      iitlb a2
+            0x00000525      idtlb a2
+            0x00000528      isync
+            0x0000052b      dsync
+            0x0000052e      jx a14
+            0x00000531      ill
+            0x00000534      ill
+            0x00000537      ill
+            0x0000053a      ill
+            0x0000053d      ill
+            0x00000540      ill
+            0x00000543      ill
+            0x00000546      ill
+            0x00000549      ill
+            0x0000054c      ill
+            0x0000054f      ill
+            0x00000552      ill
+            0x00000555      ill
+            0x00000558      ill
+            0x0000055b      ill
+            0x0000055e      ill
+            0x00000561      ill
+            0x00000564      ill
+            0x00000567      ill
+            0x0000056a      ill
+            0x0000056d      ill
+            0x00000570      ill
+            0x00000573      ill
+            0x00000576      ill
+            0x00000579      ill
+            0x0000057c      ill
+            0x0000057f      ill
+            0x00000582      ill
+            0x00000585      ill
+            0x00000588      ill
+            0x0000058b      ill
+            0x0000058e      ill
+            0x00000591      ill
+            0x00000594      ill
+            0x00000597      ill
+            0x0000059a      ill
+            0x0000059d      ill
+            0x000005a0      ill
+            0x000005a3      ill
+            0x000005a6      ill
+            0x000005a9      ill
+            0x000005ac      ill
+            0x000005af      ill
+            0x000005b2      ill
+            0x000005b5      ill
+            0x000005b8      ill
+            0x000005bb      ill
+            0x000005be      ill
+            0x000005c1      ill
+            0x000005c4      ill
+            0x000005c7      ill
+            0x000005ca      ill
+            0x000005cd      ill
+            0x000005d0      ill
+            0x000005d3      ill
+            0x000005d6      ill
+            0x000005d9      ill
+            0x000005dc      ill
+            0x000005df      ill
+            0x000005e2      ill
+            0x000005e5      ill
+            0x000005e8      ill
+            0x000005eb      ill
+            0x000005ee      ill
+            0x000005f1      ill
+            0x000005f4      ill
+            0x000005f7      ill
+            0x000005fa      ill
+            0x000005fd      ill
+            0x00000600      ill
+            0x00000603      ill
+            0x00000606      ill
+            0x00000609      ill
+            0x0000060c      ill
+            0x0000060f      ill
+            0x00000612      ill
+            0x00000615      ill
+            0x00000618      ill
+            0x0000061b      ill
+            0x0000061e      ill
+            0x00000621      ill
+            0x00000624      ill
+            0x00000627      ill
+            0x0000062a      ill
+            0x0000062d      ill
+            0x00000630      ill
+            0x00000633      ill
+            0x00000636      ill
+            0x00000639      ill
+            0x0000063c      ill
+            0x0000063f      ill
+            0x00000642      ill
+            0x00000645      ill
+            0x00000648      ill
+            0x0000064b      ill
+            0x0000064e      ill
+            0x00000651      ill
+            0x00000654      ill
+            0x00000657      ill
+            0x0000065a      ill
+            0x0000065d      ill
+            0x00000660      ill
+            0x00000663      ill
+            0x00000666      ill
+            0x00000669      ill
+            0x0000066c      ill
+            0x0000066f      ill
+            0x00000672      ill
+            0x00000675      ill
+            0x00000678      ill
+            0x0000067b      ill
+            0x0000067e      ill
+            0x00000681      ill
+            0x00000684      ill
+            0x00000687      ill
+            0x0000068a      ill
+            0x0000068d      ill
+            0x00000690      ill
+            0x00000693      ill
+            0x00000696      ill
+            0x00000699      ill
+            0x0000069c      ill
+            0x0000069f      ill
+            0x000006a2      ill
+            0x000006a5      ill
+            0x000006a8      ill
+            0x000006ab      ill
+            0x000006ae      ill
+            0x000006b1      ill
+            0x000006b4      ill
+            0x000006b7      ill
+            0x000006ba      ill
+            0x000006bd      ill
+            0x000006c0      ill
+            0x000006c3      ill
+            0x000006c6      ill
+            0x000006c9      ill
+            0x000006cc      ill
+            0x000006cf      ill
+            0x000006d2      ill
+            0x000006d5      ill
+            0x000006d8      ill
+            0x000006db      ill
+            0x000006de      ill
+            0x000006e1      ill
+            0x000006e4      ill
+            0x000006e7      ill
+            0x000006ea      ill
+            0x000006ed      ill
+            0x000006f0      ill
+            0x000006f3      ill
+            0x000006f6      ill
+            0x000006f9      ill
+            0x000006fc      ill
+            0x000006ff      ill
+            0x00000702      ill
+            0x00000705      ill
+            0x00000708      ill
+            0x0000070b      ill
+            0x0000070e      ill
+            0x00000711      ill
+            0x00000714      ill
+            0x00000717      ill
+            0x0000071a      ill
+            0x0000071d      ill
+            0x00000720      ill
+            0x00000723      ill
+            0x00000726      ill
+            0x00000729      ill
+            0x0000072c      ill
+            0x0000072f      ill
+            0x00000732      ill
+            0x00000735      ill
+            0x00000738      ill
+            0x0000073b      ill
+            0x0000073e      ill
+            0x00000741      ill
+            0x00000744      ill
+            0x00000747      ill
+            0x0000074a      ill
+            0x0000074d      ill
+            0x00000750      ill
+            0x00000753      ill
+            0x00000756      ill
+            0x00000759      ill
+            0x0000075c      ill
+            0x0000075f      ill
+            0x00000762      ill
+            0x00000765      ill
+            0x00000768      ill
+            0x0000076b      ill
+            0x0000076e      ill
+            0x00000771      ill
+            0x00000774      ill
+            0x00000777      ill
+            0x0000077a      ill
+            0x0000077d      ill
+            0x00000780      ill
+            0x00000783      ill
+            0x00000786      ill
+            0x00000789      ill
+            0x0000078c      ill
+            0x0000078f      ill
+            0x00000792      ill
+            0x00000795      ill
+            0x00000798      ill
+            0x0000079b      ill
+            0x0000079e      ill
+            0x000007a1      ill
+            0x000007a4      ill
+            0x000007a7      ill
+            0x000007aa      ill
+            0x000007ad      ill
+            0x000007b0      ill
+            0x000007b3      ill
+            0x000007b6      ill
+            0x000007b9      ill
+            0x000007bc      ill
+            0x000007bf      ill
+            0x000007c2      ill
+            0x000007c5      ill
+            0x000007c8      ill
+            0x000007cb      ill
+            0x000007ce      ill
+            0x000007d1      ill
+            0x000007d4      ill
+            0x000007d7      ill
+            0x000007da      ill
+            0x000007dd      ill
+            0x000007e0      ill
+            0x000007e3      ill
+            0x000007e6      ill
+            0x000007e9      ill
+            0x000007ec      ill
+            0x000007ef      ill
+            0x000007f2      ill
+            0x000007f5      ill
+            0x000007f8      ill
+            0x000007fb      ill
+            0x000007fe      ill
+            0x00000801      call0 0x00010ca0
+            0x00000804      call4 0x00020ca4
+            0x00000807      call8 0x00030ca4
+            0x0000080a      call12 0x00000ca8
+            0x0000080d      excw
+            0x00000810      ill
+            0x00000813      ill
+            0x00000816      ill
+            0x00000819      ill
+            0x0000081c      ill
+            0x0000081f      ill
+            0x00000822      ill
+            0x00000825      ill
+            0x00000828      ill
+            0x0000082b      ill
+            0x0000082e      ill
+            0x00000831      ill
+            0x00000834      ill
+            0x00000837      ill
+            0x0000083a      ill
+            0x0000083d      ill
+            0x00000840      l32e a0, a5, -16
+            0x00000843      l32e a1, a5, -12
+            0x00000846      l32e a2, a5, -8
+            0x00000849      l32e a3, a5, -4
+            0x0000084c      rfwu
+            0x0000084f      ill
+            0x00000852      ill
+            0x00000855      ill
+            0x00000858      ill
+            0x0000085b      ill
+            0x0000085e      ill
+            0x00000861      ill
+            0x00000864      ill
+            0x00000867      ill
+            0x0000086a      ill
+            0x0000086d      ill
+            0x00000870      ill
+            0x00000873      ill
+            0x00000876      ill
+            0x00000879      ill
+            0x0000087c      ill
+            0x0000087f      excw
+            0x00000882      s32i.n a4, a0, 0
+            0x00000884      l32r a13, 0xfffc48a8
+            0x00000887      s32i.n a13, a9, 16
+            0x00000889      s32e a2, a9, -8
+            0x0000088c      s32e a3, a9, -4
+            0x0000088f      s32e a4, a0, -32
+            0x00000892      s32e a5, a0, -28
+            0x00000895      s32e a6, a0, -24
+            0x00000898      s32e a7, a0, -20
+            0x0000089b      rfwo
+            0x0000089e      ill
+            0x000008a1      ill
+            0x000008a4      ill
+            0x000008a7      ill
+            0x000008aa      ill
+            0x000008ad      ill
+            0x000008b0      ill
+            0x000008b3      ill
+            0x000008b6      ill
+            0x000008b9      ill
+            0x000008bc      ill
+            0x000008bf      excw
+            0x000008c2      s32i.n a0, a0, 4
+            0x000008c4      s32i.n a13, a9, 0
+            0x000008c6      l32e a2, a9, -8
+            0x000008c9      l32e a7, a1, -12
+            0x000008cc      l32e a3, a9, -4
+            0x000008cf      l32e a4, a7, -32
+            0x000008d2      l32e a5, a7, -28
+            0x000008d5      l32e a6, a7, -24
+            0x000008d8      l32e a7, a7, -20
+            0x000008db      rfwu
+            0x000008de      ill
+            0x000008e1      ill
+            0x000008e4      ill
+            0x000008e7      ill
+            0x000008ea      ill
+            0x000008ed      ill
+            0x000008f0      ill
+            0x000008f3      ill
+            0x000008f6      ill
+            0x000008f9      ill
+            0x000008fc      ill
+            0x000008ff      excw
+            0x00000902      s32i.n a4, a0, 0
+            0x00000904      l32r a13, 0xfffc4928
+            0x00000907      excw
+            0x00000909      s32e a2, a13, -8
+            0x0000090c      s32e a3, a13, -4
+            0x0000090f      s32e a4, a0, -48
+            0x00000912      s32e a5, a0, -44
+            0x00000915      s32e a6, a0, -40
+            0x00000918      s32e a7, a0, -36
+            0x0000091b      s32e a8, a0, -32
+            0x0000091e      s32e a9, a0, -28
+            0x00000921      s32e a10, a0, -24
+            0x00000924      s32e a11, a0, -20
+            0x00000927      rfwo
+            0x0000092a      ill
+            0x0000092d      ill
+            0x00000930      ill
+            0x00000933      ill
+            0x00000936      ill
+            0x00000939      ill
+            0x0000093c      ill
+            0x0000093f      excw
+            0x00000942      s32i.n a0, a0, 4
+            0x00000944      mov.n a13, a9
+            0x00000946      l32e a2, a13, -8
+            0x00000949      l32e a11, a1, -12
+            0x0000094c      l32e a3, a13, -4
+            0x0000094f      l32e a4, a11, -48
+            0x00000952      l32e a5, a11, -44
+            0x00000955      l32e a6, a11, -40
+            0x00000958      l32e a7, a11, -36
+            0x0000095b      l32e a8, a11, -32
+            0x0000095e      l32e a9, a11, -28
+            0x00000961      l32e a10, a11, -24
+            0x00000964      l32e a11, a11, -20
+            0x00000967      rfwu
+            0x0000096a      ill
+            0x0000096d      ill
+            0x00000970      ill
+            0x00000973      ill
+            0x00000976      ill
+            0x00000979      ill
+        @-> 0x0000097c      j 0x0000097c
+            0x0000097f      ill
+            0x00000982      ill
+            0x00000985      ill
+            0x00000988      ill
+            0x0000098b      ill
+            0x0000098e      ill
+            0x00000991      ill
+            0x00000994      ill
+            0x00000997      ill
+            0x0000099a      ill
+            0x0000099d      ill
+            0x000009a0      ill
+            0x000009a3      ill
+            0x000009a6      ill
+            0x000009a9      ill
+            0x000009ac      ill
+            0x000009af      ill
+            0x000009b2      ill
+            0x000009b5      ill
+            0x000009b8      ill
+            0x000009bb      ill
+            0x000009be      ill
+            0x000009c1      ill
+            0x000009c4      ill
+            0x000009c7      ill
+            0x000009ca      ill
+            0x000009cd      ill
+            0x000009d0      ill
+            0x000009d3      ill
+            0x000009d6      ill
+            0x000009d9      ill
+            0x000009dc      ill
+            0x000009df      ill
+            0x000009e2      ill
+            0x000009e5      ill
+            0x000009e8      ill
+            0x000009eb      ill
+            0x000009ee      ill
+            0x000009f1      ill
+            0x000009f4      ill
+            0x000009f7      ill
+            0x000009fa      ill
+            0x000009fd      ill
+            0x00000a00      ill
+            0x00000a03      ill
+            0x00000a06      ill
+            0x00000a09      ill
+            0x00000a0c      ill
+            0x00000a0f      ill
+            0x00000a12      ill
+            0x00000a15      ill
+            0x00000a18      ill
+            0x00000a1b      ill
+            0x00000a1e      ill
+            0x00000a21      ill
+            0x00000a24      ill
+            0x00000a27      ill
+            0x00000a2a      ill
+            0x00000a2d      ill
+            0x00000a30      ill
+            0x00000a33      ill
+            0x00000a36      extui a0, a0, 0, 11
+            0x00000a39      addi.n a0, a0, 2
+            0x00000a3b      mul16s a3, a0, a0
+            0x00000a3e      excw
+            0x00000a41      { excw; excw }
+            0x00000a49      ill
+            0x00000a4c      ill
+            0x00000a4f      ill
+            0x00000a52      ill
+            0x00000a55      ill
+            0x00000a58      ill
+            0x00000a5b      ill
+            0x00000a5e      ill
+            0x00000a61      ill
+            0x00000a64      ill
+            0x00000a67      ill
+            0x00000a6a      ill
+            0x00000a6d      ill
+            0x00000a70      ill
+            0x00000a73      ill
+            0x00000a76      ill
+            0x00000a79      ill
+            0x00000a7c      ill
+            0x00000a7f      ill
+            0x00000a82      ill
+            0x00000a85      ill
+            0x00000a88      ill
+            0x00000a8b      ill
+            0x00000a8e      ill
+            0x00000a91      ill
+            0x00000a94      ill
+            0x00000a97      ill
+            0x00000a9a      ill
+            0x00000a9d      ill
+            0x00000aa0      ill
+            0x00000aa3      ill
+            0x00000aa6      ill
+            0x00000aa9      ill
+            0x00000aac      ill
+            0x00000aaf      ill
+            0x00000ab2      ill
+            0x00000ab5      ill
+            0x00000ab8      ill
+            0x00000abb      ill
+            0x00000abe      ill
+            0x00000ac1      ill
+            0x00000ac4      ill
+            0x00000ac7      ill
+            0x00000aca      ill
+            0x00000acd      ill
+            0x00000ad0      ill
+            0x00000ad3      ill
+            0x00000ad6      ill
+            0x00000ad9      ill
+            0x00000adc      ill
+            0x00000adf      ill
+            0x00000ae2      ill
+            0x00000ae5      ill
+            0x00000ae8      ill
+            0x00000aeb      ill
+            0x00000aee      ill
+            0x00000af1      ill
+            0x00000af4      ill
+            0x00000af7      ill
+            0x00000afa      ill
+            0x00000afd      ill
+            0x00000b00      ill
+            0x00000b03      ill
+            0x00000b06      ill
+            0x00000b09      ill
+            0x00000b0c      ill
+            0x00000b0f      ill
+            0x00000b12      ill
+            0x00000b15      ill
+            0x00000b18      ill
+            0x00000b1b      ill
+            0x00000b1e      ill
+            0x00000b21      ill
+            0x00000b24      ill
+            0x00000b27      ill
+            0x00000b2a      ill
+            0x00000b2d      ill
+            0x00000b30      ill
+            0x00000b33      ill
+            0x00000b36      ill
+            0x00000b39      ill
+            0x00000b3c      ill
+            0x00000b3f      ill
+            0x00000b42      ill
+            0x00000b45      ill
+            0x00000b48      ill
+            0x00000b4b      ill
+            0x00000b4e      ill
+            0x00000b51      ill
+            0x00000b54      ill
+            0x00000b57      addx8 a15, a0, a0
+            0x00000b5a      l32r a0, 0xfffc3b5c
+            0x00000b5d      l32r a11, 0xfffc0b64
+            0x00000b60      l32i.n a1, a11, 32
+            0x00000b62      ill
+            0x00000b65      add.n a1, a5, a10
+            0x00000b67      l32r a0, 0x00000368                        ; [0x368:4]=0
+            0x00000b6a      excw
+        ,=< 0x00000b6d      j 0x00000cd1
+       ,==< 0x00000b70      bnez.n a15, 0x00000b74
+       ||   0x00000b72      ill
+       ,==< 0x00000b75      j 0x000017f9
+       ||   0x00000b78      { excw; excw }
+       ||   0x00000b80      slli a12, a3, 32
+       ||   0x00000b83      excw
+       ||   0x00000b86      addx2 a0, a0, a0
+       ||   0x00000b89      l32i.n a7, a0, 0
+       ||   0x00000b8b      excw
+       ||   0x00000b8e      ill
+       ||   0x00000b91      add a0, a0, a0
+       ||   0x00000b94      or a15, a14, a0
+       ||   0x00000b97      lsiu f0, a12, 0x210
+       ||   0x00000b9a      ill
+       ||   0x00000b9d      addi.n a0, a0, 8
+       ||   0x00000b9f      excw
+       ||   0x00000ba2      extui a0, a0, 0, 6
+       ||   0x00000ba5      l32r a11, 0xfffc0bac
+       ||   0x00000ba8      srai a0, a0, 6
+       ||   0x00000bab      l32r a0, 0xfffc0bac
+       ||   0x00000bae      l8ui a0, a0, 212
+       ||   0x00000bb1      add.n a0, a0, a7
+       ||   0x00000bb3      excw
+       ||   0x00000bb6      addx4 a0, a0, a0
+       ||   0x00000bb9      excw
+       ||   0x00000bbc      l32i.n a0, a0, 0
+       ||   0x00000bbe      lsi f0, a3, 16
+       ||   0x00000bc1      rsr.sar a0
+       ||   0x00000bc4      rsr.lbeg a0
+       ||   0x00000bc7      excw
+       ||   0x00000bca      lsi f0, a0, 0
+      ,===< 0x00000bcd      bnone a0, a11, 0x00000bd1
+      |||   0x00000bd0      all8 b0, b8:b9:b10:b11:b12:b13:b14:b15
+       ||   0x00000bd3      mul16u a0, a0, a0
+       ||   0x00000bd6      excw
+       ||   0x00000bd9      { excw; excw }
+       ||   0x00000be1      excw
+       ||   0x00000be4      andb b15, b14, b0
+       ||   0x00000be7      lsi f0, a0, 0x3f8
+       ||   0x00000bea      { excw; excw }
+       ||   0x00000bf2      add a0, a0, a0
+      ,===< 0x00000bf5      bnei a1, -1, 0x00000bf9
+      |||   0x00000bf8      { excw; excw }
+       ||   0x00000c00      ill
+       ||   0x00000c03      l32r a0, 0xfffc0c04
+       ||   0x00000c06      ret
+       ||   0x00000c09      slli a4, a0, 32
+       ||   0x00000c0c      l32i.n a1, a2, 0
+       ||   0x00000c0e      subx2 a0, a9, a0
+      ,===< 0x00000c11      bnei a1, -1, 0x00000c15
+      |||   0x00000c14      callx12 a1
+       ||   0x00000c17      s32i.n a0, a0, 44
+      ,===< 0x00000c19      bnone a1, a6, 0x00000c1d
+     ,====< 0x00000c1c      bnez.n a1, 0x00000c50
+     | ||   0x00000c1e      addx2 a0, a9, a0
+     | ||   0x00000c21      l32i.n a6, a1, 0
+     | ||   0x00000c23      slli a14, a4, 32
+     | ||   0x00000c26      excw
+     | ||   0x00000c29      { excw; excw; excw }
+     | ||   0x00000c31      { slli a3, a15, 17; excw; excw }
+     |,===< 0x00000c39      bnei a6, 32, 0x00000c7c
+     ||||   0x00000c3c      ssa8l a14
+     ||||   0x00000c3f      l32r a4, 0xffffce70
+     ||||   0x00000c42      subx8 a0, a0, a0
+     ||||   0x00000c45      { excw; excw; excw }
+     ||||   0x00000c4d      excw
+     `----> 0x00000c50      rfi 0
+      |||   0x00000c53      xor a1, a4, a0
+      |||   0x00000c56      lsxu f0, a0, a0
+      |||   0x00000c59      { excw; excw }
+      |||   0x00000c61      add.n a0, a0, a15
+      |||   0x00000c63      excw
+      |||   0x00000c66      extui a0, a0, 0, 5
+      |||   0x00000c69      l32r a13, 0xfffc0c6c
+      |||   0x00000c6c      excw
+      |||   0x00000c6f      excw
+      |||   0x00000c72      excw
+      |||   0x00000c75      add.n a0, a0, a10
+      |||   0x00000c77      floor.s a7, f8, 0
+      |||   0x00000c7a      excw
+       ||   0x00000c7d      add.n a0, a0, a10
+       ||   0x00000c7f      add.s f0, f0, f0
+      ,===< 0x00000c82      bnone a3, a2, 0x00000c86
+     ,====< 0x00000c85      bge a0, a0, 0x00000c90
+     | ||   0x00000c88      addx4 a0, a0, a0
+     | ||   0x00000c8b      floor.s a12, f8, 0
+     | ||   0x00000c8e      excw
+       ||   0x00000c91      add.n a0, a0, a10
+       ||   0x00000c93      floor.s a14, f0, 0
+       ||   0x00000c96      ssr a0
+       ||   0x00000c99      addi.n a0, a0, 10
+       ||   0x00000c9b      andb b0, b0, b0
+       ||   0x00000c9e      addx8 a0, a3, a2
+       ||   0x00000ca1      excw
+       ||   0x00000ca4      any8 b7, b8:b9:b10:b11:b12:b13:b14:b15
+       ||   0x00000ca7      excw
+       ||   0x00000caa      excw
+       ||   0x00000cad      { excw; excw }
+       ||   0x00000cb5      { excw; excw }
+       ||   0x00000cbd      { excw; excw }
+       ||   0x00000cc5      mov.n a5, a0
+       ||   0x00000cc7      minu a9, a12, a0
+       ||   0x00000cca      excw
+       ||   0x00000ccd      { excw; excw; excw }
+       |,=< 0x00000cd5      bnone a0, a5, 0x00000cd9
+      ,===< 0x00000cd8      beqz.n a13, 0x00000cf1
+      ||    0x00000cda      excw
+      ||    0x00000cdd      excw
+      ||    0x00000ce0      excw
+      ||    0x00000ce3      excw
+      ||    0x00000ce6      excw
+      ||    0x00000ce9      excw
+      ||    0x00000cec      break 15, 10
+      ||    0x00000cef      excw
+       |    0x00000cf2      addx4 a0, a0, a0
+       |    0x00000cf5      { excw; excw; excw }
+       |    0x00000cfd      { excw; excw; excw }
+       |    0x00000d05      { excw; excw; excw }
+       |    0x00000d0d      { excw; excw; excw }
+       |    0x00000d15      l32i.n a7, a13, 28
+       |    0x00000d17      l32r a0, 0xfffec2d8
+       |    0x00000d1a      excw
+       |    0x00000d1d      { excw; excw; excw }
+       |    0x00000d25      excw
+       |    0x00000d28      excw
+       |    0x00000d2b      excw
+       |    0x00000d2e      ill
+       |    0x00000d31      l32r a11, 0xfffc0d34
+       |    0x00000d34      excw
+       |    0x00000d37      excw
+       |    0x00000d3a      l8ui a2, a3, 32
+       |    0x00000d3d      excw
+       |    0x00000d40      rsil a10, 9
+       |    0x00000d43      isync
+       |    0x00000d46      excw
+       |,=< 0x00000d49      bnone a1, a8, 0x00000d4d
+       ||   0x00000d4c      slli a9, a9, 24
+       |    0x00000d4f      excw
+       |    0x00000d52      ill
+       |,=< 0x00000d55      bnone a0, a4, 0x00000d59
+       ||   0x00000d58      excw
+       |    0x00000d5b      olt.s b1, f0, f0
+       |    0x00000d5e      orb b0, b0, b0
+       |    0x00000d61      excw
+       |    0x00000d64      l32i.n a15, a8, 8
+       |    0x00000d66      extui a0, a0, 0, 5
+       |    0x00000d69      l32r a2, 0xfffc0d6c
+       |    0x00000d6c      excw
+       |    0x00000d6f      { srli a3, a15, 6; excw }
+       |    0x00000d77      l32i.n a7, a15, 60
+       |    0x00000d79      call8 0x00001bac
+       |    0x00000d7c      l32r a10, 0x00000b5c                       ; [0xb5c:4]=0x1b10c
+       |    0x00000d7f      call8 0x00001bec
+       |    0x00000d82      call8 0x0001b25c
+       |    0x00000d85      movi.n a12, 0
+       |    0x00000d87      l32r a9, 0x00000b60                        ; [0xb60:4]=0x8b18
+       |    0x00000d8a      l32r a3, 0x00000b68                        ; [0xb68:4]=0x300fe00
+       |    0x00000d8d      l32r a8, 0x00000b64                        ; [0xb64:4]=0x115aa00
+       |    0x00000d90      memw
+       |    0x00000d93      s32i a12, a3, 0x224
+       |    0x00000d96      l32r a11, 0x00000b6c                       ; [0xb6c:4]=0x580600
+       |    0x00000d99      memw
+       |    0x00000d9c      s32i a11, a3, 0x250
+       |    0x00000d9f      memw
+       |    0x00000da2      l32i a10, a8, 0x1e8
+       |    0x00000da5      s32i a10, a9, 84
+       |    0x00000da8      memw
+       |    0x00000dab      l32i a8, a8, 0x1e0
+       |    0x00000dae      s32i a8, a9, 92
+       |    0x00000db1      call8 0x0001b024
+       |    0x00000db4      rsil a2, 2
+       |    0x00000db7      call8 0x00001cd4
+       |    0x00000dba      movi.n a10, 3
+       |    0x00000dbc      call8 0x0001b000
+       |    0x00000dbf      l32r a10, 0x00000b70                       ; [0xb70:4]=0xfcc
+       |    0x00000dc2      movi.n a11, 0
+       |    0x00000dc4      call8 0x000029a8
+       |    0x00000dc7      movi.n a9, -1
+       |    0x00000dc9      l32r a14, 0x00000b74                       ; [0xb74:4]=0x3200600
+       |    0x00000dcc      movi.n a13, 15
+       |    0x00000dce      memw
+       |    0x00000dd1      s32i a9, a14, 0x300
+       |    0x00000dd4      memw
+       |    0x00000dd7      s32i a9, a14, 0x304
+       |    0x00000dda      memw
+       |    0x00000ddd      s32i a9, a14, 0x308
+       |    0x00000de0      memw
+       |    0x00000de3      s32i a9, a14, 0x30c
+       |    0x00000de6      memw
+       |    0x00000de9      s32i a9, a14, 0x310
+       |    0x00000dec      memw
+       |    0x00000def      s32i a9, a14, 0x314
+       |    0x00000df2      l32r a8, 0x00000b78                        ; [0xb78:4]=0xffff
+       |    0x00000df5      memw
+       |    0x00000df8      s32i a8, a14, 0x318
+       |    0x00000dfb      movi.n a15, 3
+       |    0x00000dfd      memw
+       |    0x00000e00      s32i a15, a14, 0x320
+       |    0x00000e03      memw
+       |    0x00000e06      s32i a13, a14, 0x324
+       |    0x00000e09      call8 0x0001b374
+       |    0x00000e0c      call8 0x000011bc
+       |    0x00000e0f      call8 0x0001dd9c
+       |    0x00000e12      movi.n a11, 1
+       |    0x00000e14      memw
+       |    0x00000e17      l32i a10, a3, 0x224
+       |    0x00000e1a      or a10, a10, a11
+       |    0x00000e1d      memw
+       |    0x00000e20      s32i a10, a3, 0x224
+       |    0x00000e23      call8 0x0001b228
+       |    0x00000e26      l32r a12, 0x00000b7c                       ; [0xb7c:4]=0x115a600
+       |    0x00000e29      memw
+       |    0x00000e2c      l32i a12, a12, 0x26c
+       |    0x00000e2f      extui a12, a12, 4, 4
+       |,=< 0x00000e32      bgeui a12, 5, 0x00000e38
+       ||   0x00000e35      call8 0x000204c4
+       |`-> 0x00000e38      wsr.ps a2
+       |    0x00000e3b      movi.n a10, 0
+       |    0x00000e3d      call8 0x00001e78
+       |    0x00000e40      movi.n a2, 0
+       |    0x00000e42      retw.n
+       |    0x00000e44      entry a1, 32
+       |    0x00000e47      movi.n a10, 2
+       |    0x00000e49      call8 0x00000ebc
+       |    0x00000e4c      retw.n
+       |    0x00000e4e      excw
+       |    0x00000e51      l32r a4, 0xfffc3e54
+       |    0x00000e54      add.n a6, a5, a6
+       |,=< 0x00000e56      j 0x0000825a
+       ||   0x00000e59      callx12 a0
+       ||   0x00000e5c      entry a1, 32
+       ||   0x00000e5f      movi.n a10, 3
+       ||   0x00000e61      call8 0x00000ebc
+       ||   0x00000e64      retw.n
+       ||   0x00000e66      excw
+       ||   0x00000e69      l32r a4, 0xfffc3e6c
+       ||   0x00000e6c      add.n a14, a5, a4
+       ||   0x00000e6e      excw
+       ||   0x00000e71      callx12 a0
+       ||   0x00000e74      entry a1, 32
+       ||   0x00000e77      movi.n a10, 5
+       ||   0x00000e79      call8 0x00000ebc
+       ||   0x00000e7c      retw.n
+       ||   0x00000e7e      excw
+       ||   0x00000e81      l32r a4, 0xfffc3e84
+       ||   0x00000e84      add.n a6, a5, a7
+       ||   0x00000e86      lsi f0, a0, 116
+       ||   0x00000e89      callx12 a0
+       ||   0x00000e8c      entry a1, 32
+       ||   0x00000e8f      l32r a10, 0x00000b80                       ; [0xb80:4]=0x1c300
+       ||   0x00000e92      movi.n a11, 0
+       ||   0x00000e94      movi.n a12, 0
+       ||   0x00000e96      movi.n a13, 0
+       ||   0x00000e98      movi.n a14, 1
+       ||   0x00000e9a      movi.n a15, 0
+       ||   0x00000e9c      call8 0x000026b4
+       ||   0x00000e9f      retw.n
+       ||   0x00000ea1      ill
+       ||   0x00000ea4      entry a1, 32
+       ||   0x00000ea7      movi.n a10, 0
+       ||   0x00000ea9      call8 0x00000ebc
+       ||   0x00000eac      retw.n
+       ||   0x00000eae      excw
+       ||   0x00000eb1      l32r a4, 0xfffc3eb4
+       ||   0x00000eb4      add.n a6, a5, a1
+       ||   0x00000eb6      excw
+       ||   0x00000eb9      callx12 a0
+       ||   0x00000ebc      entry a1, 32
+       ||   0x00000ebf      mov.n a10, a2
+       ||   0x00000ec1      call8 0x00000f90
+       ||   0x00000ec4      l32r a8, 0x00000b84                        ; [0xb84:4]=0x79b0
+       ||   0x00000ec7      l32r a13, 0x00000b88                       ; [0xb88:4]=0x7890
+       ||   0x00000eca      addx2 a8, a2, a8
+       ||   0x00000ecd      l16ui a8, a8, 252
+       ||   0x00000ed0      addx4 a11, a2, a13
+       ||   0x00000ed3      l32i a11, a11, 0x1fc
+      ,===< 0x00000ed6      bltu a10, a8, 0x00000ee3
+      |||   0x00000ed9      mov.n a10, a2
+      |||   0x00000edb      movi a11, 254
+      |||   0x00000ede      call8 0x00000fc0
+      |||   0x00000ee1      retw.n
+      `---> 0x00000ee3      addx8 a11, a10, a11
+       ||   0x00000ee6      l32i.n a9, a11, 0
+       ||   0x00000ee8      movi.n a15, -3
+       ||   0x00000eea      l8ui a12, a11, 5
+      ,===< 0x00000eed      bnez.n a9, 0x00000ef9
+      |||   0x00000eef      mov.n a10, a2
+      |||   0x00000ef1      movi a11, 254
+      |||   0x00000ef4      call8 0x00000fc0
+      |||   0x00000ef7      retw.n
+      `---> 0x00000ef9      l32r a14, 0x00000b8c                       ; [0xb8c:4]=0x7ad8
+       ||   0x00000efc      l32i a10, a13, 0x240
+       ||   0x00000eff      extui a12, a12, 0, 7
+       ||   0x00000f02      l32i a14, a14, 100
+       ||   0x00000f05      and a10, a10, a15
+       ||   0x00000f08      s32i a10, a13, 0x240
+      ,===< 0x00000f0b      beqz.n a14, 0x00000f1c
+      |||   0x00000f0d      l32r a8, 0x00000b94                        ; [0xb94:4]=0x320fe00
+      |||   0x00000f10      l32r a9, 0x00000b90                        ; [0xb90:4]=0x80000000
+      |||   0x00000f13      memw
+      |||   0x00000f16      l32i a8, a8, 0x264
+     ,====< 0x00000f19      bne a8, a9, 0x00000f24
+     |`---> 0x00000f1c      movi.n a9, 2
+     | ||   0x00000f1e      or a10, a10, a9
+     | ||   0x00000f21      s32i a10, a13, 0x240
+     `,===< 0x00000f24      ball a10, a12, 0x00000f31
+      |||   0x00000f27      mov.n a10, a2
+      |||   0x00000f29      movi a11, 253
+      |||   0x00000f2c      call8 0x00000fc0
+      |||   0x00000f2f      retw.n
+      `---> 0x00000f31      l8ui a10, a11, 5
+       ||   0x00000f34      l32i.n a12, a11, 0
+      ,===< 0x00000f36      bbci a10, 7, 0x00000f40
+      |||   0x00000f39      mov.n a10, a2
+      |||   0x00000f3b      callx8 a12
+      |||   0x00000f3e      retw.n
+      `---> 0x00000f40      l8ui a11, a11, 4
+       ||   0x00000f43      movi.n a13, 0
+       ||   0x00000f45      movi.n a14, 0
+       ||   0x00000f47      mov.n a10, a12
+       ||   0x00000f49      movi.n a15, 0
+       ||   0x00000f4b      mov.n a12, a2
+       ||   0x00000f4d      call8 0x000026b4
+      ,===< 0x00000f50      bnei a10, 2, 0x00000f66
+      |||   0x00000f53      l32r a13, 0x00000b98                       ; [0xb98:4]=0x848c
+      |||   0x00000f56      l32i.n a12, a13, 0
+      |||   0x00000f58      mov.n a10, a2
+      |||   0x00000f5a      movi a11, 252
+      |||   0x00000f5d      addi.n a12, a12, 2
+      |||   0x00000f5f      s32i.n a12, a13, 0
+      |||   0x00000f61      call8 0x00000fc0
+      |||   0x00000f64      retw.n
+      `---> 0x00000f66      l32r a13, 0x00000b9c                       ; [0xb9c:4]=0x8b00
+       ||   0x00000f69      l32i.n a13, a13, 0
+      ,===< 0x00000f6b      bbci a13, 0, 0x00000f73
+      |||   0x00000f6e      mov.n a10, a2
+      |||   0x00000f70      call8 0x0000305c
+      `---> 0x00000f73      retw.n
+       ||   0x00000f75      ill
+       ||   0x00000f78      entry a1, 32
+       ||   0x00000f7b      l32r a4, 0x00000ba0                        ; [0xba0:4]=0x7000
+       ||   0x00000f7e      addx2 a2, a2, a2
+       ||   0x00000f81      addx4 a2, a2, a4
+       ||   0x00000f84      l32i.n a2, a2, 12
+       ||   0x00000f86      addx4 a2, a3, a2
+       ||   0x00000f89      memw
+       ||   0x00000f8c      l32i.n a2, a2, 0
+       ||   0x00000f8e      retw.n
+       ||   0x00000f90      entry a1, 32
+       ||   0x00000f93      l32r a3, 0x00000ba0                        ; [0xba0:4]=0x7000
+       ||   0x00000f96      addx2 a2, a2, a2
+       ||   0x00000f99      addx4 a2, a2, a3
+       ||   0x00000f9c      l32i.n a2, a2, 20
+       ||   0x00000f9e      memw
+       ||   0x00000fa1      l32i.n a2, a2, 0
+       ||   0x00000fa3      retw.n
+       ||   0x00000fa5      ill
+       ||   0x00000fa8      entry a1, 32
+       ||   0x00000fab      l32r a5, 0x00000ba0                        ; [0xba0:4]=0x7000
+       ||   0x00000fae      addx2 a4, a2, a2
+       ||   0x00000fb1      addx4 a4, a4, a5
+       ||   0x00000fb4      l32i.n a4, a4, 16
+       ||   0x00000fb6      memw
+       ||   0x00000fb9      s32i.n a3, a4, 0
+       ||   0x00000fbb      retw.n
+       ||   0x00000fbd      ill
+       ||   0x00000fc0      entry a1, 32
+       ||   0x00000fc3      l32r a4, 0x00000ba0                        ; [0xba0:4]=0x7000
+       ||   0x00000fc6      s32i.n a2, a4, 4
+       ||   0x00000fc8      s32i.n a3, a4, 0
+       ||   0x00000fca      retw.n
+       ||   0x00000fcc      entry a1, 32
+       ||   0x00000fcf      l32r a2, 0x00000ba0                        ; [0xba0:4]=0x7000
+       ||   0x00000fd2      l32i.n a11, a2, 0
+      ,===< 0x00000fd4      beqz.n a11, 0x00000fdf
+      |||   0x00000fd6      l32i.n a10, a2, 4
+      |||   0x00000fd8      call8 0x00000fa8
+      |||   0x00000fdb      movi.n a8, 0
+      |||   0x00000fdd      s32i.n a8, a2, 0
+      `---> 0x00000fdf      retw.n
+       ||   0x00000fe1      ill
+       ||   0x00000fe4      entry a1, 32
+       ||   0x00000fe7      l32r a5, 0x00000ba0                        ; [0xba0:4]=0x7000
+       ||   0x00000fea      addx2 a4, a2, a2
+       ||   0x00000fed      addx4 a4, a4, a5
+       ||   0x00000ff0      l32i.n a4, a4, 12
+       ||   0x00000ff2      memw
+       ||   0x00000ff5      s32i.n a3, a4, 0
+       ||   0x00000ff7      retw.n
+       ||   0x00000ff9      ill
+       ||   0x00000ffc      entry a1, 32
+       ||   0x00000fff      l32r a3, 0xfffc1000

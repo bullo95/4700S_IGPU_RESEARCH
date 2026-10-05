@@ -1,0 +1,25 @@
+# Firmware binaries (proprietary AMD)
+*.bin
+*.rom
+*.dec
+
+# Extracted firmware
+work/bios/
+work/blobs/
+work/psp/
+work/uefi/4700S/
+work/uefi/bc250/
+
+# Kernel headers (GPL, not our work)
+work/pmfw/hdr/
+
+# Python
+work/.venv/
+__pycache__/
+*.pyc
+
+# Backups
+work/journal_backup_*
+
+# Local settings
+.claude/

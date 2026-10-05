@@ -1,0 +1,4 @@
+PEI {'bv': 6, 'ln': 1256, 'uninit': 140, 'ltt': 132, 'exm': 1096, 'gt': 1120, 'st': 1121, 'szt': 72, 'lcount': 1, 'excount': 56026, 'gcount': 1}
+DXE {'bv': 6, 'ln': 832, 'uninit': 184, 'ltt': 176, 'exm': 724, 'gt': 756, 'st': 772, 'szt': 72, 'lcount': 1, 'excount': 56026, 'gcount': 1}
+token 0x001 off=0x0000 type=0 PTR   = None
+token 0x002 off=0x0000 type=0 PTR   = None
