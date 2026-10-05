@@ -1127,3 +1127,25 @@ Registres SMUIO Phase 1 et compatibilité 0xFF :
 | `0x5A868` (GPIO RMW) | `0x00000001` | — (test seulement) | **OUI** — test déjà confirmé | Aucun |
 
 **Prochaine étape** : analyser les registres SMUIO 0x5A320-0x5A338 individuellement pour déterminer si 0xFF est une valeur acceptable pour chacun d'eux, en comparant avec la séquence d'allumage BC-250 et les spécifications connues du bloc SMUIO.
+
+### Analyse PMFW C08 70.17 — BIOS C08 = FERMÉE (05/10/2026)
+
+**Contexte** : la puce BC-250 est parfois reconnue comme « AMD 4700S C08 ». Un BIOS C08 existe (`4700S_c08_amd.bin`, 16 Mo). Hypothèse testée : le PMFW C08 (70.17.0) a peut-être un masque de sécurité différent (0x00000000 comme on le croyait de la BC-250) → flasher le BIOS C08 désactiverait la porte de sécurité.
+
+**Extraction** : PMFW C08 extrait du BIOS par recherche du pattern de dispatch (signature à 0xEBC). Taille : 222 272 octets (0x36440), sauvé dans `work/pmfw/4700s_c08.bin`.
+
+**Correction d'erreur majeure** : l'analyse précédente des pools BC-250 était **fausse**. Le masque BC-250 rapporté comme `0x00000000` résultait d'une lecture aux adresses de pools *C0A* dans le binaire *BC-250* — les `l32r` Xtensa pointent vers des adresses différentes dans chaque PMFW (les pools "glissent" d'un build à l'autre).
+
+**Décodage corrigé des l32r** (formule correcte : `pool = (sign(imm16) << 2) + ((PC+3) & ~3)`) :
+
+| PMFW | Masque (a10) | Reg base (a8) | State base (a9) | security_flag |
+|---|---|---|---|---|
+| **C0A 70.18** | `0x00080000` ← [0x1701C] | `0x0120FE00` ← [0x17024] | `0x7AA8` ← [0x17020] | `[0x7B0C]` |
+| **C08 70.17** | `0x00080000` ← [0x1700C] | `0x0120FE00` ← [0x17014] | `0x7AA0` ← [0x17010] | `[0x7B04]` |
+| **BC-250 88.6** | `0x00080000` ← [0x1704C] | `0x0120FE00` ← [0x17054] | `0x7AD8` ← [0x17050] | `[0x7B3C]` |
+
+**Les trois PMFW ont un code de sécurité identique** : même masque `0x00080000`, même registre source `[0x012101C0]`, même extraction bit 19. Le code à l'offset `0x1B044-0x1B059` est rigoureusement le même (AND+EXTUI+S32I). Seules les adresses de pools littéraux changent d'un build à l'autre (les pools "glissent").
+
+**Conclusion** : la sécurité PMFW est contrôlée par un **fusible matériel** (bit 19 de `[0x012101C0]`), pas par le firmware. Sur BC-250, le PSP ou un fusible physique met bit 19 = 0 → sécurité désactivée. Sur 4700S (C0A *et* C08), bit 19 = 1 → sécurité activée. **Flasher le BIOS C08 ne changera rien.** Le seul scénario restant (très improbable) serait que le PSP du C08 configure `[0x012101C0]` avec bit 19 = 0, mais rien ne le suggère — le BIOS C08 est aussi un BIOS 4700S.
+
+**Piste BIOS C08 : FERMÉE.**
