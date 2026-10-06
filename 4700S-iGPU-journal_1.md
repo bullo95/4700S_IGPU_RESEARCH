@@ -1149,3 +1149,231 @@ Registres SMUIO Phase 1 et compatibilité 0xFF :
 **Conclusion** : la sécurité PMFW est contrôlée par un **fusible matériel** (bit 19 de `[0x012101C0]`), pas par le firmware. Sur BC-250, le PSP ou un fusible physique met bit 19 = 0 → sécurité désactivée. Sur 4700S (C0A *et* C08), bit 19 = 1 → sécurité activée. **Flasher le BIOS C08 ne changera rien.** Le seul scénario restant (très improbable) serait que le PSP du C08 configure `[0x012101C0]` avec bit 19 = 0, mais rien ne le suggère — le BIOS C08 est aussi un BIOS 4700S.
 
 **Piste BIOS C08 : FERMÉE.**
+
+### Comparaison APCB 4700S vs BC-250 (05/10/2026)
+
+**Contexte** : le bloc APCB (AMD Platform Customization Block) à l'offset BIOS `0xAB1000` contient les paramètres OEM lus par AGESA au POST. Comparé entre le BIOS 4700S courant (`now_20261004.bin`) et le BIOS BC-250 (`bc250_2.00.bin`). Taille APCB : 0x488 octets. Second bloc APCB (backup, +0x488) identique dans les deux.
+
+**Résultat** : seulement **11 octets** diffèrent, répartis en 5 zones :
+
+| Zone | Groupe | Type | Description | 4700S | BC-250 |
+|---|---|---|---|---|---|
+| 1 | Header | — | UniqueID / ParamCount | 0x24ED / 94 | 0x2144 / 133 |
+| 2 | PSPG 0x1701 | 0x02 | Version AGESA embarquée | 0x08110000 | 0x21110900 |
+| 3 | MEMG 0x1704 | 0x07 | Token mémoire (instance 0) | 00, 0000 | 01, 0020 |
+| 4 | MEMG 0x1704 | 0x08 | Token mémoire (instance 1) | 00, 0000 | 01, 0020 |
+| 5 | **CBSG 0x1707** | **0x0D** | **CBS_CMN_GNB** | **00, 0000** | **01, 0020** |
+
+**Structure décodée** : chaque groupe contient un répertoire de tokens (4 octets/token : instance, ID, type, padding) suivi des valeurs. Le motif est identique dans les 3 zones fonctionnelles (3-5) : un octet 0→1 (flag d'activation) et un octet à +2 qui passe de 0→0x20.
+
+**Zones 1-2 (métadonnées)** : UniqueID = checksum OEM. ParamCount = nombre de paramètres (plus élevé sur BC-250). Version AGESA = référence du firmware PSP intégrée dans la config. Aucun levier.
+
+**Zones 3-4 (MEMG type 0x07/0x08)** : tokens dans le groupe Mémoire (0x1704), dupliqués dans deux instances identiques. Probablement liés à l'allocation UMA (framebuffer iGPU). Sur 4700S, le flag est à 0 (pas d'UMA pour iGPU) ; sur BC-250, à 1 avec paramètre 0x20.
+
+**Zone 5 (CBSG type 0x0D = CBS_CMN_GNB)** : tokens dans le groupe CBS (0x1707), sous-type 0x0D = Graphics North Bridge. Token 5 (1 octet) passe de 0 à 1 (activation GNB/iGPU). Token 6 (2 octets) passe de 0x0000 à 0x0020 (paramètre GNB associé).
+
+**Impact** : ces tokens CBS sont lus par AGESA au POST. Les modifier dans le BIOS 4700S amènerait AGESA à tenter d'initialiser le chemin GNB/iGPU. **Cependant** : le fusible matériel (bit 19 de `[0x012101C0]`) reste à 1 → le PMFW bloquera l'allumage GFX quand même. C'est un **verrou complémentaire** (nécessaire mais pas suffisant). Note : `IgpuControl` (token 0x4B, dans un APCB CBS plus grand, déjà patché à 1) couvre le masquage PCI côté x86 ; les tokens CBSG type 0x0D couvrent la config AGESA côté GNB/mémoire — ce sont deux couches différentes.
+
+**Piste APCB : OUVERTE pour compléter la piste 1** (msg 0x98 vers SMUIO). Modifier ces 6 octets pourrait préparer le terrain AGESA (UMA allouée, GNB initialisé) avant qu'on tente l'allumage GFX via msg 0x98. Sans effet seul.
+
+### Piste 1 : analyse complète msg 0x98 → SMUIO (05/10/2026)
+
+#### Rappel : msg 0x98 (handler 0x27134, garde=0x00)
+
+Écrit la valeur **fixe 0xFF** (`movi a12, 255`) à SMN[ARG] via le chemin SMN interne du SMU (fenêtrage 0x02Cxxxxx → slot 0x03220038). Accès SMUIO confirmé par test (0x5A868 : 0x01 → 0xFF). La valeur n'est PAS paramétrable.
+
+#### Phase 1 SMUIO : compatibilité 0xFF
+
+La séquence Phase 1 du BC-250 (PC 0x29E9A-0x29F5B) fait 5 opérations RMW sur les registres SMUIO (base Xtensa 0x0115A200 → SMN 0x0005A200) :
+
+| # | Registre | SMN | Opération BC-250 | Valeur cible | 0xFF | Verdict |
+|---|----------|-----|-------------------|-------------|------|---------|
+| 1 | +0x120 | 0x5A320 | AND ~2 → clear bit 1 | bit 1 = 0 (power gate OFF) | bit 1 = 1 | **BLOQUANT** : 0xFF renforce le gate |
+| 2 | +0x134 | 0x5A334 | OR 0x30 → set bits 4-5 | 0x3F (clock enable) | 0xFF | Incertain — bits 6-7 en trop |
+| 3 | +0x130 | 0x5A330 | OR 1, AND ~0xE → set 0, clear 1-3 | 0x01 (reset deassert) | 0xFF | **BLOQUANT** : bits 1-3 doivent être 0 |
+| 4 | +0x12C | 0x5A32C | OR 0x17, AND ~8 → set 0,1,2,4, clear 3 | 0x17 (domain ctrl) | 0xFF | **BLOQUANT** : bit 3 doit être 0 |
+| 5 | +0x138 | 0x5A338 | OR 1 (conditionnel, après init GFX page) | 0x01 (handshake) | 0xFF | Acceptable — surensemble |
+
+**Résultat : 0xFF est incompatible avec 3 registres sur 5.** Le registre critique est 0x5A320 (power gate) : écrire 0xFF maintient bit 1 = 1, l'îlot GFX reste éteint.
+
+#### Registre 0x5A328 : pas un compagnon CLR
+
+Hypothèse testée : 0x5A328 pourrait être un registre « write-1-to-clear » associé à 0x5A320. Code analysé dans les deux PMFW :
+- C0A (PC 0x2D944-0x2D96F) : `l32i a5, base, 0x128 ; and a5, ~1 ; or a5, bit ; s32i`
+- BC-250 (PC 0x31CA3-0x31CCB) : identique
+
+Les deux font un RMW standard (read/AND/OR/write). Un registre CLR ne nécessiterait pas de lecture préalable. **0x5A328 est un registre indépendant avec sa propre logique de contrôle bit 0.**
+
+#### Exclusivité de msg 0x98
+
+Analyse exhaustive : **26 fonctions** appellent `smn_write` (0x2A74) dans le PMFW C0A. Seul msg 0x98 est accessible depuis un handler non gardé. Les 25 autres sont :
+- Dans des handlers avec guard=0x02 (ex: Q3 msg 0x2C handler 0x26E10 — écrit ARG comme valeur, mais bloqué)
+- Dans des fonctions internes non atteignables depuis aucun handler non gardé
+- Vérification : chaîne d'appels sur 2 niveaux, 4 files × tous les handlers non gardés (95+ handlers)
+
+Le handler le plus prometteur, Q3 msg 0x2C (0x26E10), appelle `smn_write(slot=0, addr=[pool], value=ARG, width=2)` — écriture paramétrable ! — mais son guard=0x02 le verrouille.
+
+#### Phase 3 : page GFX inaccessible
+
+La page GFX (registres à SMN 0x0900Bxxx) est accédée par le BC-250 via le bus local Xtensa (0x0100Bxxx). msg 0x98 utilise le chemin SMN fenêtré (0x02Cxxxxx). **Testé** : écriture msg 0x98 vers SMN 0x0900B100 → gel SMU (bus hang, coupure secteur). Le PSP bloque l'accès SMN 0x09xxxxxx pour tous les initiateurs sauf le bus local Xtensa.
+
+Même si 0xFF était acceptable pour Phase 1, Phase 3 (handshake GFX, diviseurs CLK, écriture B034 bit 0) est structurellement hors de portée de msg 0x98.
+
+#### Bypass du flag de sécurité (SRAM 0x7B0C)
+
+Si on pouvait écrire 0 à l'adresse SRAM 0x7B0C (security_flag initialisé depuis le fusible bit 19), les msgs 0x2B/0x2C (guard=0x02) seraient débloqués, offrant une écriture SMN paramétrable.
+
+Analyse des 95+ handlers non gardés pour ARG-as-store-address :
+- **Q0 msg 0x33** (handler 0x261AC) : stocke une valeur MMIO à l'adresse tirée d'une table de pointeurs (pool [0x17C10] = 0x10C90). Table décodée : 112 pointeurs dans la plage 0x107xx-0x10Bxx. **Aucun ne pointe vers 0x7B0C.**
+- **Q3 msg 0x4F** (handler 0x26F88) : stocke ARG[15:0] signé à l'adresse `base + idx×964 + 0x3B8` (base = pool [0x17174] = 0xCF50). Adresse minimum = 0xD308, maximum = 0x10B84. **0x7B0C est en-dessous de la plage.**
+- **Sub 0x26494** (appelée par Q2 msg 0x2A, Q3 msg 0x20/0x77/0x8B) : stocke une constante de pool à [paramètre+4]. Le paramètre est un pointeur de struct passé par l'appelant, pas ARG. **Valeur non contrôlable.**
+
+Seule la fonction d'init 0x1B024 (exécutée au boot, pas un handler) écrit à 0x7B0C.
+
+**Piste 1 : FERMÉE.**
+
+Raisons cumulées :
+1. Valeur 0xFF fixe, incompatible avec 3/5 registres Phase 1
+2. Pas de registres CLR dans le bloc SMUIO power
+3. Aucun autre smn_write accessible (25 appelants bloqués ou inaccessibles)
+4. Phase 3 (page GFX SMN 0x09xxxxxx) inaccessible via msg 0x98
+5. Bypass security_flag impossible (aucun handler non gardé ne peut écrire à 0x7B0C)
+
+---
+
+### Exploration exhaustive Q2 / mbox 2 (05/10/2026, session 7 suite)
+
+42 messages, **tous guard=0x00** (accès libre). Registres : CMD=0x03B10528, RSP=0x03B10564, ARG=0x03B10998.
+
+**Résultat : aucun levier caché.**
+
+Répartition fonctionnelle :
+- ~30 handlers triviaux (8-20 insns) : lisent ARG, stockent dans SRAM → paramètres DPM (courbes V/F, limites thermiques, ventilation).
+- **msg 0x1E** : seul handler avec écriture MMIO. Appelle sub 0x26028 qui fait 3 RMW sur SMUIO 0x5A094 (clear bits 1, 4, 16). Séquence fixe, pas de paramètre ARG. Registre 0x5A094 = config SMUIO, pas power domain.
+- **msg 0x0A** : retourne 0x05 (constante). Appelle sub 0x280C4 = lecteur de bit status à SMU register 0x032000E8.
+- **msg 0x09** : appelle sub 0x3555C = prédicat (retourne 1 si octet[11]==3, sinon 0). 7 instructions, aucune écriture.
+- **msg 0x05/0x06** : chemin le plus profond. Appellent 0x1D438 (dispatcher DPM avec table de pointeurs de fonction à SRAM 0xCB68). Le dispatcher itère sur un bitmap et appelle des callbacks.
+  - 4 callbacks (0x29F64, 0x29FC4, 0x2A064, 0x2A0B0) atteignent smn_write via sub 0x237DC.
+  - **Sub 0x237DC** : switch sur un index (0-8), écrit dans NBIO (0x11180460, 0x1118018C), CLK (0x0116xxxx), MMHUB (0x01F3A200). **Toutes les adresses sont des constantes de pool.** Aucune ne cible les registres SMUIO power 0x5A320-338. ARG ne parvient pas jusqu'aux paramètres de smn_write.
+- **msg 0x17** : appelle 0x29DC4, stocke ARG dans SRAM 0x156DC.
+- **msg 0x1D** : appelle 0x1B1E4, stocke ARG dans SRAM 0xC700.
+- **msg 0x2C (Q2)** : appelle 0x2DD7C = conversion flottante DPM. Pas de smn_write.
+- **msg 0x27/0x28** : I2C (déjà fermé session 4).
+- **msg 0x30** : appelle 0x1CECC (validateur de bornes, retourne 0/1) et 0x01014 (table lookup read-only).
+- **msg 0x0B** : appelle 0x01014 (table lookup). Aucune écriture.
+- **msg 0x1B/0x1C** : config I2C dans SRAM 0x15300 (enable/disable + valeur). Non pertinent.
+
+Sous-fonctions analysées :
+| Adresse | Rôle | Écritures |
+|---------|------|-----------|
+| 0x3555C | prédicat (byte==3?) | aucune |
+| 0x01014 | table lookup stride 12 | aucune (read-only) |
+| 0x1CECC | validateur de bornes | aucune (retourne 0/1) |
+| 0x1D438 | dispatcher DPM bitmap | indirectes via callx8 |
+| 0x237DC | enable features DPM | smn_write → NBIO/MMHUB (fixe) |
+| 0x26028 | disable SMUIO 0x5A094 | RMW clear bits 1,4,16 (fixe) |
+| 0x280C4 | lecteur bit status | aucune (read-only) |
+| 0x29DC4 | SRAM store | SRAM 0x156DC |
+| 0x1B1E4 | SRAM store | SRAM 0xC700 |
+| 0x2DD7C | conversion float DPM | SRAM (paramètres) |
+
+---
+
+### Bilan : surface d'attaque logicielle épuisée (05/10/2026)
+
+Les **4 files de messages** du PMFW 4700S C0A sont entièrement cartographiées :
+
+| File | Msgs | Guard=0 | Résultat |
+|------|-------|---------|----------|
+| Q0 (mbox 0) | 55 | 55 | copie table MMIO (msg 0x33), aucun primitif utile |
+| Q2 (mbox 2) | 42 | 42 | DPM params, 1 MMIO write (0x5A094, fixe), smn_write via DPM → NBIO (fixe) |
+| Q3 file 2 (mbox 3/4) | 169 | 95 | msg 0x98 = seul smn_write non gardé, **valeur fixe 0xFF** |
+| Q3 file 3 (mbox 5) | ? | ? | sous-ensemble Q3 |
+
+**Aucun chemin logiciel ne permet d'écrire une valeur choisie aux registres SMUIO power 0x5A320-338 ni à la page GFX 0x09xxxxxx.**
+
+Raisons structurelles :
+1. Le PMFW 4700S n'a **aucune référence** aux registres SMUIO power (0x5A320-338) dans son literal pool — le code GFX a été supprimé.
+2. Le seul smn_write non gardé (msg 0x98) écrit une constante 0xFF.
+3. Le smn_write paramétrable (Q3 msg 0x2C) est verrouillé par guard=0x02 (fusible matériel).
+4. La page GFX (SMN 0x09xxxxxx) est inaccessible via le windowed path — gel SMU.
+5. Le security_flag (SRAM 0x7B0C) est écrit uniquement à l'init par un fusible matériel.
+
+**Piste PMFW patch — FERMÉE (06/10/2026)** : analyse PSPTool confirme RSA-2048 sur le body entier (256 Ko), clé racine fusée (chaîne CRD, clé B6F9). `encrypted=False` (lisible mais non modifiable). 1 seul bit changé → SHA-256 invalide → rejet PSP → no-POST. Aucun PMFW modifié n'a jamais booté publiquement. Seul bypass connu : voltage glitch (Buhren et al., CCS 2021).
+
+**Pistes restantes (toutes matérielles) :**
+- **SPI Flash MitM (FPGA)** : intercepter les lectures SPI pendant le boot PSP pour présenter un PMFW modifié. Nécessite de contourner la signature PSP (TOCTOU, fault injection).
+- **Fault injection PSP** : glitching voltage/clock pendant la vérification de signature. Approche avancée.
+
+---
+
+### Image E : APCB tokens GNB/MEMG (06/10/2026)
+
+**Base** : image D (IgpuControl=1, UMA 512 Mo, boot stable).
+
+**Modifications APCB** (offset BIOS 0xAB1000, bloc primaire uniquement, backup=0xFF) :
+
+| Offset APCB | Offset BIOS | Avant | Après | Token |
+|---|---|---|---|---|
+| +0x010 | 0xAB1010 | 0xBF | 0x5F | Checksum (byte-sum mod 256 = 0) |
+| +0x221 | 0xAB1221 | 0x00 | 0x01 | MEMG 0x1704 type 0x07 — flag activation |
+| +0x223 | 0xAB1223 | 0x00 | 0x20 | MEMG 0x1704 type 0x07 — paramètre |
+| +0x2CD | 0xAB12CD | 0x00 | 0x01 | MEMG 0x1704 type 0x08 — flag activation |
+| +0x2CF | 0xAB12CF | 0x00 | 0x20 | MEMG 0x1704 type 0x08 — paramètre |
+| +0x462 | 0xAB1462 | 0x02 | 0x20 | CBSG 0x1707 type 0x0D — paramètre GNB (LE16: 0x0002→0x0020) |
+
+Fichier : `work/bios/4700s_imgE_apcb_gnb.bin`
+SHA256 : `cbbc30e71241bebc24f827aa5a7e2cef7cf4dcff5066035dc696b1adb98410a5`
+
+**Effet attendu** : AGESA lit les tokens MEMG (config mémoire iGPU) et CBSG (init GNB complet) au POST. Le PMFW reçoit EnableSmuFeatures avec bit 6 (GFX DPM) via mbox 2 msg 0x05. L'ABL pourrait envoyer des messages SMU supplémentaires.
+
+**Ce que ça ne fait PAS** : allumer l'îlot GFX — le PMFW 70.x n'a pas le code. Mais le rail VRM GFX est alimenté (0,83 V, Badcaps) et un effet de bord ABL/AGESA sur les registres SMUIO power n'est pas exclu.
+
+**Plan de test** :
+1. Flasher : `sudo flashrom -p internal -w work/bios/4700s_imgE_apcb_gnb.bin`
+2. Booter, vérifier POST
+3. `lspci -nn | grep -i vga` (device ID, subsystem)
+4. `dmesg | grep -iE 'uma|igpu|gnb|gfx|amdgpu'`
+5. Lecture SMUIO : `sudo python3 scripts/smnread.py /tmp/smnlog_imgE.log 0x5A320 0x5A32C 0x5A330 0x5A334 0x5A338`
+6. Comparer les valeurs SMUIO avec l'état « GFX off » connu (image D)
+7. Si changement → analyser et documenter
+8. Si identique → APCB seul ne suffit pas, confirme que le verrou est 100% dans le PMFW signé
+
+**Repli** : si no-POST, flasher image D (`4700S_dump_igpu_D_cbsuma512.bin`) ou image B-bis avec CH341A.
+
+### Résultat image E (06/10/2026)
+
+**POST** : OK — ventilateur à fond 2 s puis régulation normale (identique à image D).
+
+**lspci** : iGPU visible `01:00.0 VGA [0300]: 1002:13fd`. Le BIOS la désigne comme boot VGA device (`vgaarb: setting as boot VGA device`).
+
+**PCI détail** :
+
+| BAR | Adresse | Taille | État |
+|---|---|---|---|
+| 0 (framebuffer) | 0xC0000000 | 256 Mo | disabled |
+| 2 (doorbell) | 0xD0000000 | 2 Mo | disabled |
+| 4 (I/O) | 0xE000 | 256 o | disabled |
+| 5 (MMIO) | 0xFD400000 | 512 Ko | disabled |
+
+- `Control: Mem- BusMaster-` → device non activé
+- `Status: >TAbort+` → accès MMIO rejeté (îlot GFX éteint)
+- `LnkCap/Sta: 16GT/s x16` (Gen4, lien interne SoC) mais `DLActive-` → data link down
+
+**SMUIO power** :
+
+| Registre | Valeur | Comparaison image D |
+|---|---|---|
+| 0x5A328 | 0x00000000 | identique |
+| 0x5A32C | 0x00000008 | identique |
+| 0x5A330 | 0x0000000E | identique |
+| 0x5A334 | 0x0000000F | identique |
+| 0x5A338 | 0x00000000 | identique |
+
+**e820** : 8 Go réservés `0x270000000-0x46FFFFFFF` (moitié GPU du GDDR6). Mémoire système : ~7,7 Go / 8 Go.
+
+**Conclusion** : les tokens APCB (MEMG + CBSG GNB) n'ont **aucun effet** sur les registres SMUIO power. L'îlot GFX reste éteint. Le verrou est confirmé à **100% dans le PMFW signé** — ni l'APCB, ni IgpuControl, ni les tokens AGESA ne peuvent allumer le GFX. La prise de courant AGESA/ABL est en amont du PMFW mais ne touche pas aux registres power.
+
+**Piste APCB — FERMÉE.**
+
+Toutes les approches logicielles et de configuration sont épuisées. Les seules pistes restantes sont **matérielles** : SPI MitM (FPGA) ou fault injection PSP.

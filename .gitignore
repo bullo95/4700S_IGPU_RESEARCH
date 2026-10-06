@@ -3,6 +3,9 @@
 *.rom
 *.dec
 
+# Exception : images BIOS de recherche documentées
+!bios/*.bin
+
 # Extracted firmware
 work/bios/
 work/blobs/
