@@ -1377,3 +1377,159 @@ SHA256 : `cbbc30e71241bebc24f827aa5a7e2cef7cf4dcff5066035dc696b1adb98410a5`
 **Piste APCB — FERMÉE.**
 
 Toutes les approches logicielles et de configuration sont épuisées. Les seules pistes restantes sont **matérielles** : SPI MitM (FPGA) ou fault injection PSP.
+
+## Pistes matérielles — état de l'art et faisabilité (06/10/2026)
+
+La surface logicielle étant épuisée (4 files SMU cartographiées, pas de chemin vers les registres GFX power, fusible matériel bit 19), il ne reste que deux classes d'attaques : exploitation d'une faille dans le BootROM du PSP, ou injection de fautes matérielles (voltage/clock glitching) pendant le boot PSP.
+
+### Piste A — Exploitation du BootROM PSP (software-on-hardware)
+
+**Principe** : trouver un buffer overflow ou une faille d'exécution dans le code du BootROM ou du chargeur PSP initial pour exécuter du code arbitraire avant la vérification de signature RSA, et sauter la routine de lecture du fusible.
+
+**État de l'art** :
+
+| Date | Événement | Pertinence 4700S |
+|---|---|---|
+| 2018-01 | Google Cloud Security : stack-based buffer overflow dans le trustlet fTPM du PSP (AMD Zen 1). Disclosure sept. 2017, publication janv. 2018. Contrôle total du PC. | Corrigé sur Zen 2 (firmware). Le trustlet tourne APRÈS le boot → ne bypass pas la lecture des fusibles. |
+| 2021-08 | CVE-2021-26315 : vérification insuffisante de l'intégrité de l'image déchiffrée dans le boot rom PSP → code arbitraire lors du chargement de firmwares chiffrés. | **Directement pertinent** : c'est dans le boot rom, avant la validation de signature. Affecte Zen 1–3. AMD a publié un correctif AGESA, mais le boot rom est en ROM — le correctif ne peut être qu'un contournement logiciel dans les stages ultérieurs. |
+| 2021-11 | CVE-2021-26335 : vérification insuffisante de l'en-tête du boot loader ASP → code arbitraire avant validation de signature. | Même classe que 26315 : exploitable en théorie si le boot rom de notre stepping n'a pas été corrigé en silicium. |
+| 2023-05 | Le BootROM Zen 2 du PSP est leaké (reverse complet). PSPTool et la communauté PS5 l'analysent. | Le code est public → le reverse engineering est faisable. Base : architecture ARM Cortex-A5, ~64 Ko de ROM. |
+
+**Faisabilité** :
+- Le BootROM est gravé dans le silicium (on-die ROM), donc non patchable par firmware. Si le stepping de la 4700S a la faille CVE-2021-26315 dans sa ROM, elle est toujours là.
+- **MAIS** : AMD a probablement corrigé le BootROM dans les steppings ultérieurs (mask ROM → nouveau masque). Le die « Ariel » est un silicium console (Xbox Series X / PS5), qui a pu recevoir un BootROM durci par rapport aux EPYC Zen 2 commerciaux.
+- **Travail nécessaire** : dumper le BootROM du PSP (via SPI sniffing au boot, ou via la fuite publique si même stepping), identifier le stepping exact, vérifier si les CVE 2021 sont présentes. C'est du reverse ARM Cortex-A5 lourd (~64 Ko de code).
+- **Difficulté** : 8/10. Compétences requises : reverse ARM bare-metal, connaissance du protocole SPI PSP, outils PSPTool/Ghidra. Pas de garantie que la faille existe sur ce stepping.
+
+### Piste B — Injection de fautes (Voltage Glitching via SVI2)
+
+**Principe** : pendant le boot du PSP, provoquer un glitch de tension sur le rail d'alimentation du SoC via le bus SVI2 (Serial Voltage Identification Interface 2.0) pour faire sauter une instruction critique (vérification de signature, lecture de fusible). Le PSP accepte alors un firmware non signé ou ignore le fusible.
+
+**État de l'art** :
+
+| Date | Travail | Détails |
+|---|---|---|
+| 2021-08 | **"One Glitch to Rule Them All"** (Buhren, Jacob, Krachenfels, Seifert — TU Berlin / Fraunhofer) | Attaque par voltage glitch via SVI2 sur AMD-SP. Démontré sur **Zen 1, Zen 2, Zen 3** (EPYC). Teensy 4.0 injecte des paquets SVI2 pour provoquer une chute de tension pendant le boot PSP → le boot rom accepte une clé publique forgée → firmware SEV custom chargé. Code et matériel publiés : [github.com/PSPReverse/amd-sp-glitch](https://github.com/PSPReverse/amd-sp-glitch). |
+| 2023-05 | **"faulTPM: Exposing AMD fTPMs' Deepest Secrets"** (Jacob, Werling, Buhren, Seifert) | Même technique SVI2 appliquée à l'extraction des secrets fTPM. Démontré sur **Zen 2 et Zen 3**. Coût matériel : **~$195**. Casse BitLocker. AMD déclare que le problème ne peut pas être corrigé. |
+| 2026-03 | **"Bliss"** (Markus Gaasedelen, RE//verse 2026) | Double voltage glitch sur le BootROM PSP de la **Xbox One** (AMD Jaguar). Bypass complet de la chaîne de sécurité. **1-en-un-million** de taux de succès → nécessite des jours d'exécution automatisée. Uniquement Xbox One originale (2013) — **les Xbox One S/X et Series S/X ont des BootROMs durcies avec des moniteurs actifs de glitch.** |
+
+**Matériel requis (d'après "One Glitch" / faulTPM)** :
+
+| Composant | Coût approx. | Rôle |
+|---|---|---|
+| Teensy 4.0 | ~20 € | Injection paquets SVI2, timing du glitch |
+| Programmeur SPI (CH341A) | ~15 € | Déploiement du payload (déjà possédé) |
+| Analyseur logique (Saleae ou clone) | ~15 € | Debug, exfiltration données, timing SPI CS |
+| Émulateur flash EM100 (optionnel) | ~200+ € | Remplacement dynamique du flash SPI (optionnel si CH341A suffit) |
+| Sondes à ressort (pogo pins) | ~120 € | Contact sur les lignes SVI2 du PCB |
+| Driver IC + résistances | ~5 € | Mise en forme du signal SVI2 |
+| Relais contrôlable | ~15 € | Reset ATX automatisé |
+| **Total** | **~200-400 €** | Sans l'EM100, ~200 € |
+
+**Protocole SVI2** : bus 2 fils (SVC = clock, SVD = data) entre le SoC et le contrôleur VRM. Le SoC envoie des paquets de 3 octets (sélection rail + tension cible). L'attaque intercepte ce bus et injecte un paquet qui force une chute de tension brève (~ns) pendant une fenêtre critique du boot PSP.
+
+### Évaluation de faisabilité sur la 4700S
+
+**Points favorables** :
+
+1. **Architecture SVI2 confirmée** : la 4700S est Zen 2, elle utilise SVI2 (pas SVI3 qui arrive avec Zen 4/AM5). Le bus est sur le PCB entre le SoC et le VRM 5 phases.
+2. **Attaque démontrée sur Zen 2** : "One Glitch" et "faulTPM" ont été démontrés sur des CPU Zen 2 commerciaux (EPYC, Ryzen). Le mécanisme est le même.
+3. **PCB accessible** : contrairement à un laptop ou une console soudée, la carte 4700S est un ITX standard avec des composants VRM accessibles. Les lignes SVC/SVD devraient être traçables entre le SoC BGA et le contrôleur VRM.
+4. **Flash SPI non protégé** : le W25Q128.V est déjà accessible (flashrom fonctionne). Le monitoring du CS SPI pour le timing du glitch est faisable.
+5. **CH341A déjà possédé** : un des composants clés est déjà en place.
+6. **Déclaration AMD** : "cannot be mitigated" pour l'attaque faulTPM sur Zen 2/3.
+7. **Code open-source** : le repo [PSPReverse/amd-sp-glitch](https://github.com/PSPReverse/amd-sp-glitch) fournit le code Teensy et la méthodologie.
+
+**Points défavorables / risques** :
+
+1. **⚠️ DIE CONSOLE = MONITEURS DE GLITCH ?** Le die « Ariel » est le silicium Xbox Series X / PS5. L'exploit Bliss (2026) confirme que les **Xbox Series S/X ont des BootROMs durcies avec des moniteurs actifs de voltage glitch**. Si ces moniteurs sont gravés dans le silicium (et pas seulement dans le code BootROM), la 4700S les a aussi. C'est le **risque principal**. Contre-argument : les travaux "One Glitch" déclarent que l'attaque fonctionne sur TOUS les Zen 2, et AMD dit qu'elle "ne peut pas être corrigée". Le durcissement Xbox pourrait être uniquement dans le code BootROM (un masque ROM différent), pas dans des circuits détecteurs dédiés.
+2. **Package BGA** : le SoC est soudé, pas en socket. Les lignes SVI2 passent par le substrat BGA → les points de contact sont sur le PCB (pistes ou vias), pas sur des pins accessibles. Il faut tracer les lignes SVC/SVD sur la carte (multimètre + datasheet VRM controller).
+3. **Taux de succès** : l'exploit Bliss a un taux de 1-en-un-million. "One Glitch" ne publie pas de taux précis mais nécessite une boucle automatisée (reset ATX → glitch → vérification → retry). Peut prendre des heures à des jours.
+4. **Risque matériel** : un glitch mal calibré peut corrompre le flash SPI (récupérable via CH341A) ou, dans le pire cas, endommager le VRM ou le SoC.
+5. **Objectif différent** : "One Glitch" vise à charger un firmware SEV custom. Ici, l'objectif est d'exécuter du code sur le PSP pour soit (a) charger un PMFW non signé avec GFX activé, soit (b) modifier le fusible / security flag en SRAM avant que le PMFW ne le lise. Le payload PSP doit être écrit sur mesure.
+
+**Étapes concrètes si on choisit cette piste** :
+
+1. **Identifier le contrôleur VRM** sur le PCB de la 4700S (photo macro, lecture du marquage du chip). Confirmer qu'il utilise SVI2.
+2. **Tracer les lignes SVC/SVD** entre le BGA et le VRM controller. Repérer les points de soudure/test accessibles.
+3. **Acquérir le matériel** : Teensy 4.0, pogo pins, analyseur logique, driver IC (budget ~200 €).
+4. **Reproduire l'attaque "One Glitch"** en ciblant le boot PSP : adapter le code du repo PSPReverse au timing de la 4700S.
+5. **Développer le payload PSP** : code ARM Cortex-A5 qui, une fois exécuté sur le PSP, soit (a) patche le security flag SRAM [0x7B0C] avant le lancement du PMFW, soit (b) charge un PMFW modifié (non signé) avec le code GFX réactivé.
+6. **Tester avec boucle automatisée** : script PC → Teensy → glitch → vérification via SPI ou UART debug.
+
+### Piste C — SPI Man-in-the-Middle (FPGA) (alternative)
+
+Non développée dans ce texte. Principe : un FPGA entre la flash SPI et le SoC intercepte les lectures du PSP au boot et substitue un firmware modifié en temps réel. Contourne la signature si le BootROM ne vérifie pas l'intégrité du bus SPI lui-même (il vérifie la signature du contenu, pas l'authenticité du bus). **Avantage** : pas besoin de glitch, pas de taux de succès aléatoire. **Inconvénient** : la vérification RSA s'applique au contenu lu, donc le MitM ne sert que si on a un exploit BootROM pour sauter la vérification — ce qui revient à la Piste A. Seul scénario utile : si le BootROM a un bug de parsing exploitable via le contenu SPI (ce que CVE-2021-26315/26335 suggèrent).
+
+### DÉCOUVERTE MAJEURE — pAMDora (tihmstar, 39C3, décembre 2025)
+
+**tihmstar a déjà hacké le PSP de cartes 4700S.** Présentation publique au 39e Chaos Communication Congress :
+
+- Titre : *"Opening pAMDora's box and unleashing a thousand paths on the journey to play Beatsaber custom songs"*
+- Vidéo (44 min, CC-BY 4.0) : https://media.ccc.de/v/39c3-opening-pamdora-s-box-and-unleashing-a-thousand-paths-on-the-journey-to-play-beatsaber-custom-songs
+- YouTube : https://www.youtube.com/watch?v=grYuvOv7ByE
+
+**Contexte** : tihmstar voulait jouer à Beat Saber custom songs sur PS5. Il a acheté des cartes 4700S (APU PS5 recyclé, GPU désactivé, même SoC) — moins chères, surtout les cartes défectueuses sur eBay — pour développer ses exploits avant de les porter sur la console.
+
+**Résultats** :
+- **6 bugs non patchables** dans le PSP (ROM on-die, pas de correctif possible)
+- **5 zero-day exploits**
+- **Exécution de code en EL3** (Exception Level 3 = mode le plus privilégié ARM) sur le cœur sécurisé du PSP
+- Techniques de fault injection physiques **nouvelles** adaptées aux cartes avec gros condensateurs et MOSFETs puissants (= la 4700S)
+
+**Parcours technique** :
+1. A tenté le glitching classique via SVI2, mais des **bugs logiciels** dans le PSP ont bloqué les tentatives de glitch
+2. A exploité ces bugs logiciels comme point d'entrée
+3. De là, a découvert et exploité de plus en plus de bugs en cascade
+4. A fini avec EL3 sur le cœur PSP
+
+**Ce que ça signifie pour nous** :
+- L'exécution de code sur le PSP de la 4700S est **démontrée** — ce n'est plus théorique
+- Si on reproduit les exploits de tihmstar, on peut depuis le PSP :
+  - (a) Patcher le `security_flag` SRAM [0x7B0C] avant le lancement du PMFW
+  - (b) Charger un PMFW modifié avec le code GFX
+  - (c) Écrire directement dans les registres power SMUIO 0x5A320-338
+  - (d) Modifier le bit 19 du registre de sécurité Xtensa 0x012101C0
+
+**Statut des outils** (06/10/2026) : le code des exploits **n'est pas encore publié** sur GitHub. Seule la vidéo de la conférence est disponible. Il faudra :
+1. Visionner la vidéo en détail pour extraire les bugs/CVE spécifiques et les techniques
+2. Surveiller les publications futures de tihmstar (GitHub, blog, forums PS5)
+3. Éventuellement le contacter pour collaboration ou reproduction
+
+### Extraction PSP (06/10/2026)
+
+PSPTool installé, blobs extraits du BIOS actuel (`now_20261004.bin`) dans `work/psp_blobs/`. Fichiers clés :
+- `d00_e04_ABL0~0x30_22.4.6.0` : off-chip bootloader stage 0, compressé zlib, 7952 octets décompressés → code ARM32+Thumb-2 (LDR r13 en entrée), strings AGESA visibles ("ABL0 - Main ABL Execution", "Calling ABL 1-4 BL")
+- `d00_e11_BL_PUBLIC_KEY~0x50` : clé publique BL (key ID `3476...`)
+- `d00_e12_PSP_FW_TRUSTED_OS~0x2` : Trusted OS, chaîne "CRD" confirmée
+- ABL0 signé avec key ID `C551...` (différent de BL_PUBLIC_KEY → signé par la root key du BootROM)
+- ABL décompressé dans `work/psp_blobs/abl0_decompressed.bin`
+
+**CVE-2025-29951** : buffer overflow dans le bootloader ASP. Bulletin AMD-SB-7044, affecte "Zen 4 and prior" = **inclut Zen 2**. À vérifier si exploitable sur notre BIOS.
+
+### Recommandation (révisée)
+
+**La piste A (exploitation logicielle du PSP) redevient la plus prometteuse**, grâce aux travaux de tihmstar. L'exécution de code EL3 sur le PSP de la 4700S est démontrée publiquement.
+
+**Actions prioritaires** :
+1. **Visionner la vidéo 39C3** en détail, noter chaque bug/exploit/technique décrit
+2. **Surveiller les publications** de tihmstar (code, writeup, CVE)
+3. **Analyser le BootROM Zen 2 leaké** (si trouvable) dans Ghidra — ARM Cortex-A5
+4. **Creuser CVE-2025-29951** (buffer overflow ASP bootloader) — vérifier si applicable à notre image
+5. **Analyser ABL0-ABL4** décompressés pour chercher les bugs de parsing mentionnés par tihmstar
+
+Le matériel de glitching reste le plan B (~200 €) si les bugs logiciels ne sont pas reproductibles sans.
+
+**Sources** :
+- [pAMDora — vidéo 39C3 (media.ccc.de)](https://media.ccc.de/v/39c3-opening-pamdora-s-box-and-unleashing-a-thousand-paths-on-the-journey-to-play-beatsaber-custom-songs)
+- [pAMDora — YouTube](https://www.youtube.com/watch?v=grYuvOv7ByE)
+- [One Glitch to Rule Them All (PDF, Black Hat EU 2021)](https://i.blackhat.com/EU-21/Wednesday/EU-21-Buhren-One-Glitch-to-Rule-them-All-Fault-Injection-Attacks-Against-AMDs-Secure-Processor.pdf)
+- [One Glitch — paper complet (arXiv)](https://arxiv.org/pdf/2108.04575)
+- [PSPReverse/amd-sp-glitch (GitHub)](https://github.com/PSPReverse/amd-sp-glitch)
+- [faulTPM: Exposing AMD fTPMs' Deepest Secrets (arXiv)](https://arxiv.org/html/2304.14717v2)
+- [Reversing the AMD Secure Processor — Part 1 (DayZeroSec)](https://dayzerosec.com/blog/2023/04/17/reversing-the-amd-secure-processor-psp.html)
+- [All You Ever Wanted to Know About the AMD PSP (Black Hat USA 2020)](https://i.blackhat.com/USA-20/Wednesday/us-20-Buhren-All-You-Ever-Wanted-To-Know-About-The-AMD-Platform-Security-Processor-And-Were-Afraid-To-Emulate.pdf)
+- [AMD Zen 2 PSP BootROM leaked (Wololo.net)](https://wololo.net/2023/05/15/amd-zen-2-secure-processor-bootrom-leaked-ftpm-compromised-more-amd-vulnerabilities-spark-ps5-scenes-interest/)
+- [AMD-SB-7044 (bulletin AMD)](https://www.amd.com/en/resources/product-security/bulletin/amd-sb-7044.html)
+- [CVE-2025-29951 (NVD)](https://nvd.nist.gov/vuln/detail/CVE-2025-29951)
+- [Xbox One Bliss exploit (TechSpot)](https://www.techspot.com/news/111692-hacker-unveils-exploit-cracks-unbreakable-xbox-one-silicon.html)
